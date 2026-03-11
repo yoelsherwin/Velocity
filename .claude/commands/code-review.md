@@ -109,4 +109,40 @@ Same format as above.
 
 ---
 
+## Save Your Report
+
+**Naming convention:** `CODE-REVIEW-<task-name>-R<N>.md`
+
+Before writing, check `prompts/reports/code-reviews/` for existing reviews of the same task to determine the round number. If none exist, use `R1`. If `R1` exists, use `R2`, etc.
+
+Example: `CODE-REVIEW-TASK-001-pty-engine-R2.md`
+
+Write to `prompts/reports/code-reviews/`.
+
+**If this is R2 or later**, start your report with a **Previous Round Resolution** section:
+
+```markdown
+## Previous Round Resolution
+- [Finding from R(N-1)]: RESOLVED / STILL OPEN / PARTIALLY FIXED
+- [Finding from R(N-1)]: RESOLVED / STILL OPEN / PARTIALLY FIXED
+```
+
+Then proceed with the normal review of the current diff.
+
+**Final verdict must be one of:**
+- **APPROVE** — all previous-round issues resolved, no new critical findings
+- **NEEDS CHANGES** — issues remain or new ones found
+- **BLOCK** — fundamental problem
+
+If your assessment is **NEEDS CHANGES** or **BLOCK**, also create GitHub issues for each Critical finding:
+
+```bash
+gh issue create \
+  --title "Code Review: [description]" \
+  --label "bug,code-review" \
+  --body "[details]"
+```
+
+---
+
 Begin your review now.

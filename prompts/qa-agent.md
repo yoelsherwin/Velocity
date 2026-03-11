@@ -158,7 +158,7 @@ EOF
 
 ### Step 7: Write QA Report
 
-Save your report to `prompts/reports/QA-REPORT-<date>.md`:
+Save your report to `prompts/reports/qa-reports/QA-REPORT-<date>.md`:
 
 ```markdown
 # QA Report — [Date]

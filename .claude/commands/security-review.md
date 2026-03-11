@@ -62,11 +62,25 @@ This application **spawns shell processes and executes arbitrary commands on the
 
 ---
 
+## Audit Scope
+
+This review may cover **multiple tasks and commits**. Check `prompts/reports/security-reviews/` for the last security review to find its commit range. Then run:
+
+```bash
+git log --oneline <last-reviewed-commit>..HEAD
+```
+
+If no previous security review exists, audit the entire codebase. The relevant commit range and tasks should also be listed at the bottom of this prompt (provided by the CTO).
+
+Focus your audit on files changed in this range, but also review any security-critical code they interact with.
+
+---
+
 ## Audit Process
 
 ### Step 1: Map the Attack Surface
 
-Read the codebase and identify every point where:
+Review the commit range above, then read the codebase and identify every point where:
 1. User input flows into a shell command
 2. The frontend calls a Tauri IPC command
 3. Process output flows into the UI
@@ -121,10 +135,32 @@ Flag any dependencies with known CVEs, especially in:
 
 ### Security Report
 
-Write your report to `prompts/reports/SECURITY-REVIEW-<date>.md`:
+**Naming convention:** `SECURITY-REVIEW-<scope>-R<N>.md`
+
+The scope should reflect what's being audited — a single task, a milestone, or a range:
+- Single task: `SECURITY-REVIEW-TASK-003-ansi-parser-R1.md`
+- Milestone: `SECURITY-REVIEW-PILLAR-1-process-engine-R1.md`
+- Multi-task: `SECURITY-REVIEW-TASK-001-thru-003-R1.md`
+
+Before writing, check `prompts/reports/security-reviews/` for existing reviews with the same scope to determine the round number.
+
+**If this is R2 or later**, start your report with a **Previous Round Resolution** section:
+
+```markdown
+## Previous Round Resolution
+- [Finding from R(N-1)]: RESOLVED / STILL OPEN / PARTIALLY FIXED
+- [Finding from R(N-1)]: RESOLVED / STILL OPEN / PARTIALLY FIXED
+```
+
+Then proceed with the full audit. The report template:
 
 ```markdown
 # Security Review — [Date]
+
+## Scope
+- **Commit range**: `<from-commit>..<to-commit>`
+- **Tasks covered**: TASK-001, TASK-002, ...
+- **HEAD at time of review**: `<commit-hash>`
 
 ## Attack Surface Map
 [Numbered list of every entry point identified in Step 1]

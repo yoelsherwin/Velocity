@@ -175,12 +175,12 @@ Break the 5 MVP pillars into ordered features. Recommended order:
 
 For each feature or bug fix, follow this cycle:
 
-### 1. Plan
+### 1. Plan (TDD-First)
 
 Read the current codebase state. Understand what exists. Then:
 - Define what the feature requires (backend + frontend + IPC)
 - Identify dependencies on existing code
-- Determine test strategy
+- **Design the tests before the implementation.** Decide what tests prove the feature works — these become the task's primary deliverable. The implementation exists to make the tests pass, not the other way around.
 - Estimate complexity
 
 ### 2. Write Dev Agent Prompt
@@ -205,13 +205,24 @@ Create a file at `prompts/tasks/TASK-NNN-short-description.md` with this structu
 [The exact Tauri commands and events that connect backend ↔ frontend.
 Include function signatures, parameter types, and return types.]
 
-## Test Strategy
-[What tests to write first. Be specific about test scenarios.]
+## Tests (Write These FIRST)
+The dev agent MUST write these tests before any implementation code.
+
+### Rust Tests (cargo test)
+- [ ] [Specific test: what function, what input, what expected output]
+- [ ] [Specific test: ...]
+
+### Frontend Tests (Vitest)
+- [ ] [Specific test: what component/hook, what behavior to verify]
+- [ ] [Specific test: ...]
+
+### E2E Tests (Playwright) — if applicable
+- [ ] [Specific test: what user action, what expected result]
 
 ## Acceptance Criteria
+- [ ] All tests above are written and passing
 - [ ] [Criterion 1]
 - [ ] [Criterion 2]
-- [ ] [All tests pass]
 
 ## Files to Read First
 - `src-tauri/src/...` — [why]
@@ -222,36 +233,63 @@ Include function signatures, parameter types, and return types.]
 
 **Stop and wait.** The human must review and approve the prompt before a dev agent runs. Present the prompt and ask: "Ready to spawn a dev agent for this task?"
 
-### 4. Monitor Completion
+### 4. Code Review
 
-After the dev agent commits:
+After the dev agent commits, tell the human to spawn a Code Review session (`/code-review`).
+
+Reports are named `CODE-REVIEW-<task-name>-R<N>.md` (R1, R2, R3...). Always read the **highest round number** for the task — that's the latest. Each R2+ report starts with a "Previous Round Resolution" section showing what was fixed.
+
+Read the latest report and act on its verdict:
+- **APPROVE**: All issues resolved. Proceed to QA (or Security Review if applicable).
+- **NEEDS CHANGES**: Write fix prompts for Critical/Important findings. After fixes are committed, tell human to run `/code-review` again (produces the next round).
+- **BLOCK**: Hard stop. Analyze the fundamental issue and rewrite the task prompt if needed.
+
+### 5. Monitor & Verify
+
+After code review passes:
 - Read the git log: `git log --oneline -10`
-- Read the diff: `git diff HEAD~1`
-- Check if acceptance criteria from the task prompt are met
+- Read the diff to confirm acceptance criteria from the task prompt are met
 - Note any concerns for QA
 
-### 5. Security Review (Periodic)
+### 6. Security Review (After Code Reviews Pass)
 
-Tell the human to spawn a Security Review session (`prompts/security-reviewer.md`). **Required** after:
-- Any feature that touches PTY/process spawning code
-- Any feature that adds or modifies IPC commands
-- Any feature that handles user input flowing to a shell
+Security review happens **after all code reviews for the batch are approved** — not per-task. It may cover multiple tasks and commits.
+
+**Required** after:
+- Any batch of tasks that touches PTY/process spawning code
+- Any batch that adds or modifies IPC commands
+- Any batch that handles user input flowing to a shell
 - Completion of each MVP pillar (milestone gate)
 
-After the security report is written to `prompts/reports/SECURITY-REVIEW-*.md`, read it and:
+**When requesting a security review**, provide the human with the audit scope to pass to the reviewer. Look up:
+1. The last security review's HEAD commit (from the "Scope" section of the latest report in `prompts/reports/security-reviews/`)
+2. The current HEAD commit
+3. The list of tasks completed since the last security review
+
+Tell the human:
+> "Run `/security-review` with this scope:
+> Commit range: `<last-reviewed-commit>..HEAD`
+> Tasks: TASK-001, TASK-002, TASK-003"
+
+The human passes this as context when spawning the session.
+
+Reports are named `SECURITY-REVIEW-<scope>-R<N>.md` (R1, R2, R3...). Always read the **highest round number** — each R2+ report starts with a "Previous Round Resolution" section.
+
+Read the latest report and:
 - Treat CRITICAL findings as blockers — no new features until fixed
 - Treat HIGH findings as urgent — fix before next QA cycle
 - Create GitHub issues with `security` label for each finding
 - Write focused fix prompts for security issues (these take priority over feature work)
+- After fixes, tell human to run `/security-review` again (produces the next round)
 
-### 6. QA Cycle
+### 7. QA Cycle
 
 Tell the human to spawn a QA session. After the QA report is written to `prompts/reports/`, read it and:
 - Categorize bugs by severity
 - Create GitHub issues for each bug
 - Plan fix priorities
 
-### 7. Spawn Fix Agents
+### 8. Spawn Fix Agents
 
 For each bug, write a focused fix prompt. Multiple fix agents can run in parallel on independent bugs.
 
@@ -275,7 +313,7 @@ Fix prompt format:
 - [Relevant files]
 ```
 
-### 8. Next Feature
+### 9. Next Feature
 
 Once all bugs and security findings from the current cycle are fixed, move to the next feature.
 
@@ -284,9 +322,9 @@ Once all bugs and security findings from the current cycle are fixed, move to th
 ## Communication Norms
 
 ### When writing dev prompts:
+- **TDD is mandatory.** Every task must specify concrete tests the dev agent writes before implementation. Vague test strategies like "write tests for the feature" are not acceptable — name the test, the input, and the expected behavior.
 - Be explicit about file paths (which files to read first)
 - Define IPC contracts precisely (command names, param types, return types)
-- Always include test-first instructions
 - Specify commit message format: `feat: ...` or `fix: ... #NNN`
 
 ### When triaging bugs:

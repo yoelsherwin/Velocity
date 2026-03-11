@@ -27,57 +27,56 @@ The core idea: a persistent CTO session plans and delegates, ephemeral agent ses
 ```
 YOU (Human)
  │
- ├─→ CTO Session (persistent)
- │    │
- │    ├─ Phase 0: Bootstrap the project (first time only)
- │    │
- │    ├─ Plan feature
- │    │   └─ Write dev prompt → prompts/tasks/TASK-NNN.md
- │    │
- │    │        ↓ [You review the prompt]
- │    │
- │    ├─ You spawn Dev Agent (new Claude Code session)
- │    │   │
- │    │   ├─ Explore codebase
- │    │   ├─ Write tests (TDD)
- │    │   ├─ Implement feature
- │    │   ├─ Self-review
- │    │   ├─ Run full test suite
- │    │   ├─ Commit to main
- │    │   └─ Session ends
- │    │
- │    ├─ You spawn Code Reviewer (new session)
- │    │   │
- │    │   ├─ Review git diff
- │    │   ├─ Report findings
- │    │   └─ Session ends
- │    │
- │    ├─ You spawn Security Reviewer (new session, periodic)
- │    │   │
- │    │   ├─ Audit IPC attack surface
- │    │   ├─ Test command injection vectors
- │    │   ├─ Review PTY/ANSI handling
- │    │   ├─ Write security report → prompts/reports/
- │    │   └─ Session ends
- │    │
- │    ├─ CTO reviews commits + security report
- │    │
- │    ├─ You spawn QA Agent (new session)
- │    │   │
- │    │   ├─ Run automated tests
- │    │   ├─ Analyze code for bugs
- │    │   ├─ Write manual test scripts
- │    │   ├─ File GitHub issues
- │    │   ├─ Write QA report → prompts/reports/
- │    │   └─ Session ends
- │    │
- │    ├─ CTO triages QA report
- │    │   └─ Writes fix prompts (can parallelize multiple agents)
- │    │
- │    └─ Cycle repeats for next feature
- │
- └─→ You are the bottleneck. Your attention is the scarce resource.
-     Agents run in parallel. You review and approve.
+ └─→ CTO Session (persistent)
+      │
+      ├─ Phase 0: Bootstrap the project (first time only)
+      │
+      │  ┌─────────────── PER TASK ───────────────┐
+      │  │                                         │
+      ├──┤  Plan feature (TDD-first)               │
+      │  │    └─ Write dev prompt → prompts/tasks/  │
+      │  │                                         │
+      │  │         ↓ [You review the prompt]       │
+      │  │                                         │
+      │  │  Dev Agent (/dev TASK-NNN.md)           │
+      │  │    ├─ Explore → Write tests → Implement │
+      │  │    ├─ Self-review → Full test suite     │
+      │  │    └─ Commit to main                    │
+      │  │                                         │
+      │  │  Code Reviewer (/code-review)           │
+      │  │    ├─ Review git diff                   │
+      │  │    └─ Report → code-reviews/...-R<N>.md │
+      │  │                                         │
+      │  │  CTO reads review:                      │
+      │  │    APPROVE → next task or batch gate    │
+      │  │    NEEDS CHANGES → fix → re-review      │
+      │  │                                         │
+      │  └─── Repeat for each task in batch ───────┘
+      │
+      │  ┌─────────── PER BATCH / PILLAR ─────────┐
+      │  │                                         │
+      ├──┤  Security Reviewer (/security-review)   │
+      │  │    ├─ CTO provides commit range + tasks │
+      │  │    ├─ Audit all changes in range        │
+      │  │    └─ Report → security-reviews/...-R<N>│
+      │  │                                         │
+      │  │  CTO reads review:                      │
+      │  │    CRITICAL → block, fix, re-review     │
+      │  │    Clean → proceed to QA                │
+      │  │                                         │
+      │  │  QA Agent (/qa)                         │
+      │  │    ├─ Run all tests                     │
+      │  │    ├─ Code-level bug hunt               │
+      │  │    ├─ Write manual test plans           │
+      │  │    ├─ File GitHub issues                │
+      │  │    └─ Report → qa-reports/...           │
+      │  │                                         │
+      │  │  CTO triages QA report                  │
+      │  │    └─ Writes fix prompts (parallelizable)│
+      │  │                                         │
+      │  └─── Repeat for next batch ───────────────┘
+      │
+      └─ You review summaries. Agents do the work.
 ```
 
 ---
@@ -121,20 +120,29 @@ No pasting needed — just type the command in any Claude Code session.
 1. Open a NEW Claude Code session in C:\Velocity
 2. Type: /code-review
 3. Reviewer analyzes the latest git diff
-4. Review its findings, then bring critical issues back to CTO
+4. Report saved to: prompts/reports/code-reviews/CODE-REVIEW-<task-name>-R<N>.md
+5. Go to CTO session and say: "Code review for TASK-NNN is done. Review it."
+   (On re-reviews after fixes, just say: "Code review R2 for TASK-NNN is done.")
 ```
 
 ### Security Review Session
 
+Runs **after code reviews pass** — may cover multiple tasks/commits.
+The CTO provides the commit range and task list.
+
 ```
 1. Open a NEW Claude Code session in C:\Velocity
 2. Type: /security-review
-3. Reviewer audits the codebase for terminal-specific attack vectors
-4. Bring the security report back to the CTO session
+3. Paste the scope the CTO gave you, e.g.:
+     Commit range: abc1234..def5678
+     Tasks: TASK-001, TASK-002, TASK-003
+4. Reviewer audits all changes in that range
+5. Report saved to: prompts/reports/security-reviews/SECURITY-REVIEW-<scope>-R<N>.md
+6. Go to CTO session and say: "Security review is done. Review it."
 ```
 
-**When to run:** After every feature that touches PTY/process code, IPC commands,
-or input handling. At minimum, run once per MVP pillar completion.
+**When to run:** After all code reviews for a batch are approved. At minimum,
+once per MVP pillar completion.
 
 ### QA Session
 
@@ -142,7 +150,8 @@ or input handling. At minimum, run once per MVP pillar completion.
 1. Open a NEW Claude Code session in C:\Velocity
 2. Type: /qa
 3. QA agent runs tests, hunts for bugs, writes report
-4. Bring the report back to the CTO session
+4. Report saved to: prompts/reports/qa-reports/QA-REPORT-<date>.md
+5. Go to CTO session and say: "QA report is done. Review it."
 ```
 
 ---
@@ -172,8 +181,10 @@ C:\Velocity\
 │   ├── qa-agent.md          ← QA agent template
 │   ├── tasks/               ← CTO writes task prompts here
 │   │   └── TASK-001-pty-engine.md
-│   └── reports/             ← QA writes reports here
-│       └── QA-REPORT-2025-01-15.md
+│   └── reports/
+│       ├── code-reviews/    ← CODE-REVIEW-TASK-001-pty-engine-R1.md
+│       ├── security-reviews/← SECURITY-REVIEW-TASK-001-pty-engine-R1.md
+│       └── qa-reports/      ← QA-REPORT-2025-01-15.md
 ├── src/                     ← React/TypeScript frontend
 ├── src-tauri/               ← Rust/Tauri backend
 └── CLAUDE.md                ← Project-level Claude Code config

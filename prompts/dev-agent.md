@@ -45,33 +45,35 @@ Before writing code, briefly state your implementation plan:
 - What IPC commands and events are needed?
 - What tests will you write?
 
-### Step 3: Write Tests First (TDD)
+### Step 3: Write Tests First (TDD — Mandatory)
 
-Write tests BEFORE implementation:
+**Do NOT write any implementation code until your tests exist and fail.**
 
-**Frontend (Vitest):**
-- Component rendering tests
-- Hook behavior tests
-- Integration tests for IPC interactions (mock `invoke`)
+The task file includes a "Tests (Write These FIRST)" section with specific tests the CTO has designed. Write every one of them. If the task doesn't specify tests, design them yourself based on the requirements — but they must exist before implementation begins.
 
-**Backend (Rust):**
-- Unit tests for logic functions
-- Tests for command handlers (where practical)
+**Rust tests (cargo test):**
+- Write unit tests for every function/module the task requires
+- Tests go in the same file (`#[cfg(test)] mod tests`) or a `tests/` directory
 
-**E2E (Playwright):**
-- User-visible behavior tests (if the task involves UI interaction)
+**Frontend tests (Vitest):**
+- Write component rendering tests
+- Write hook behavior tests
+- Mock `invoke` for IPC interaction tests
 
-Tests MUST fail initially — they test functionality that doesn't exist yet. This is correct and expected.
+**E2E tests (Playwright):**
+- Write user-visible behavior tests if the task involves UI interaction
 
-### Step 4: Implement
+**After writing tests, run them. They MUST fail.** If they pass before you've written implementation code, your tests aren't testing the right thing — fix them.
 
-Build the feature to make your tests pass:
+### Step 4: Implement (Make Tests Pass)
+
+Your ONLY goal in this step is to make the failing tests from Step 3 pass.
 
 1. **Backend (Rust) first**: Tauri commands, data structures, logic, state management
 2. **Frontend (TypeScript/React) second**: Components, hooks, state
 3. **IPC bridge**: Wire the frontend to backend via invoke/listen
 
-Iterate until all new tests pass. If a test needs adjusting because your design evolved, adjust it — but don't delete tests to make the build pass.
+Iterate until all new tests pass. If a test needs adjusting because your design evolved, adjust it — but never delete a test to make the build pass. Never write implementation code that isn't covered by a test.
 
 ### Step 5: Self-Review
 
@@ -138,12 +140,13 @@ Then your session is done.
 ## Critical Rules
 
 1. **NEVER skip the explore step.** Read the codebase before you write code.
-2. **NEVER commit with failing tests.** All tests must pass — both yours and existing.
-3. **NEVER introduce security vulnerabilities.** This app executes system commands. All user input is untrusted. All IPC inputs validated on the Rust side.
-4. **ONE task per session.** Complete the task, commit, and stop. Do not work on other things.
-5. **If stuck, stop.** If you're looping on the same problem for more than 3 attempts, label the issue as `blocked`, explain what's wrong, and stop. Don't burn context spinning.
-6. **Follow existing patterns.** Match the code style, structure, and conventions already present. Don't innovate on style.
-7. **No unnecessary refactoring.** Only change what the task requires. Don't "clean up" unrelated code.
+2. **NEVER write implementation before tests.** TDD is not optional. Tests first, implementation second. If you catch yourself writing a function before its test exists, stop and write the test.
+3. **NEVER commit with failing tests.** All tests must pass — both yours and existing.
+4. **NEVER introduce security vulnerabilities.** This app executes system commands. All user input is untrusted. All IPC inputs validated on the Rust side.
+5. **ONE task per session.** Complete the task, commit, and stop. Do not work on other things.
+6. **If stuck, stop.** If you're looping on the same problem for more than 3 attempts, label the issue as `blocked`, explain what's wrong, and stop. Don't burn context spinning.
+7. **Follow existing patterns.** Match the code style, structure, and conventions already present. Don't innovate on style.
+8. **No unnecessary refactoring.** Only change what the task requires. Don't "clean up" unrelated code.
 
 ---
 
