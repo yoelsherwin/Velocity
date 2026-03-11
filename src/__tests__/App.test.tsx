@@ -1,8 +1,10 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { expect, test, vi } from "vitest";
 
-vi.mock('@tauri-apps/api/core', () => ({
-  invoke: vi.fn().mockResolvedValue('test-session-id'),
+vi.mock('../lib/pty', () => ({
+  createSession: vi.fn().mockResolvedValue('test-session-id'),
+  writeToSession: vi.fn().mockResolvedValue(undefined),
+  closeSession: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('@tauri-apps/api/event', () => ({
@@ -11,12 +13,16 @@ vi.mock('@tauri-apps/api/event', () => ({
 
 import App from "../App";
 
-test("renders App with terminal", () => {
+test("renders App with terminal", async () => {
   render(<App />);
-  expect(screen.getByTestId("terminal-output")).toBeInTheDocument();
+  await waitFor(() => {
+    expect(screen.getByTestId("terminal-output")).toBeInTheDocument();
+  });
 });
 
-test("renders terminal input", () => {
+test("renders terminal input", async () => {
   render(<App />);
-  expect(screen.getByTestId("terminal-input")).toBeInTheDocument();
+  await waitFor(() => {
+    expect(screen.getByTestId("terminal-input")).toBeInTheDocument();
+  });
 });

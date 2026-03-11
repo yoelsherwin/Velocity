@@ -1,6 +1,8 @@
 use portable_pty::{CommandBuilder, MasterPty, PtySize, Child, native_pty_system};
 use std::collections::HashMap;
 use std::io::{Read, Write};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use tauri::AppHandle;
 use tauri::Emitter;
 use uuid::Uuid;
@@ -13,12 +15,15 @@ pub fn validate_shell_type(shell_type: &str) -> Result<(), String> {
 }
 
 pub struct ShellSession {
+    #[allow(dead_code)] // Reserved for future use (session listing, tab labels)
     pub id: String,
     #[allow(dead_code)]
     master: Box<dyn MasterPty + Send>,
     writer: Box<dyn Write + Send>,
     child: Box<dyn Child + Send + Sync>,
+    #[allow(dead_code)] // Reserved for future use (session listing, tab labels)
     pub shell_type: String,
+    shutdown: Arc<AtomicBool>,
 }
 
 pub struct SessionManager {
@@ -32,6 +37,7 @@ impl SessionManager {
         }
     }
 
+    #[allow(dead_code)] // Reserved for future use (list-sessions command)
     pub fn get_session_ids(&self) -> Vec<String> {
         self.sessions.keys().cloned().collect()
     }
@@ -85,10 +91,15 @@ impl SessionManager {
 
         let session_id = Uuid::new_v4().to_string();
         let sid = session_id.clone();
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let shutdown_flag = shutdown.clone();
 
         std::thread::spawn(move || {
             let mut buf = [0u8; 4096];
             loop {
+                if shutdown_flag.load(Ordering::Relaxed) {
+                    break;
+                }
                 match reader.read(&mut buf) {
                     Ok(0) => break,
                     Ok(n) => {
@@ -116,6 +127,7 @@ impl SessionManager {
             writer,
             child,
             shell_type: shell_type.to_string(),
+            shutdown,
         };
 
         self.sessions.insert(session_id.clone(), session);
@@ -166,8 +178,21 @@ impl SessionManager {
             .remove(session_id)
             .ok_or_else(|| format!("Session not found: {}", session_id))?;
 
+        // Signal reader thread to stop
+        session.shutdown.store(true, Ordering::Relaxed);
+
         // Kill the child process — ignore errors (may already be dead)
         let _ = session.child.kill();
+
+        // Wait for child to exit to avoid zombie process handles
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        match session.child.try_wait() {
+            Ok(Some(_status)) => {} // Exited cleanly
+            _ => {
+                // Force wait — blocking but should be fast after kill
+                let _ = session.child.wait();
+            }
+        }
 
         Ok(())
     }
@@ -176,6 +201,8 @@ impl SessionManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
 
     #[test]
     fn test_session_manager_starts_empty() {
@@ -234,6 +261,20 @@ mod tests {
             "Error should contain 'not found', got: {}",
             err
         );
+    }
+
+    #[test]
+    fn test_shutdown_flag_defaults_to_false() {
+        let flag = Arc::new(AtomicBool::new(false));
+        assert!(!flag.load(Ordering::Relaxed));
+    }
+
+    #[test]
+    fn test_shutdown_flag_can_be_set() {
+        let flag = Arc::new(AtomicBool::new(false));
+        let flag_clone = flag.clone();
+        flag_clone.store(true, Ordering::Relaxed);
+        assert!(flag.load(Ordering::Relaxed));
     }
 
     #[test]

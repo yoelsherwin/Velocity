@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { createSession, writeToSession, closeSession } from '../lib/pty';
 
 const OUTPUT_BUFFER_LIMIT = 100_000;
 
@@ -20,11 +20,7 @@ function Terminal() {
 
     async function init() {
       try {
-        sid = await invoke<string>('create_session', {
-          shell_type: 'powershell',
-          rows: 24,
-          cols: 80,
-        });
+        sid = await createSession('powershell', 24, 80);
 
         if (!mounted) return;
         setSessionId(sid);
@@ -61,7 +57,7 @@ function Terminal() {
       if (unlistenError) unlistenError();
       if (unlistenClosed) unlistenClosed();
       if (sid) {
-        invoke('close_session', { session_id: sid }).catch(() => {});
+        closeSession(sid).catch(() => {});
       }
     };
   }, []);
@@ -75,10 +71,9 @@ function Terminal() {
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
       if (e.key === 'Enter' && sessionId && !closed) {
-        invoke('write_to_session', {
-          session_id: sessionId,
-          data: input + '\r',
-        }).catch(() => {});
+        writeToSession(sessionId, input + '\r').catch((err) => {
+          setOutput((prev) => prev + `\n[Write error: ${err}]\n`);
+        });
         setInput('');
       }
     },

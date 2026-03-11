@@ -1,9 +1,9 @@
 use crate::pty::SessionManager;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use tauri::State;
 
 pub struct AppState {
-    pub session_manager: Mutex<SessionManager>,
+    pub session_manager: Arc<Mutex<SessionManager>>,
 }
 
 #[tauri::command]
@@ -14,16 +14,20 @@ pub async fn create_session(
     rows: Option<u16>,
     cols: Option<u16>,
 ) -> Result<String, String> {
-    let shell = shell_type.as_deref().unwrap_or("powershell");
-    let r = rows.unwrap_or(24);
-    let c = cols.unwrap_or(80);
+    let manager = state.session_manager.clone();
+    tokio::task::spawn_blocking(move || {
+        let shell = shell_type.as_deref().unwrap_or("powershell");
+        let r = rows.unwrap_or(24);
+        let c = cols.unwrap_or(80);
 
-    let mut manager = state
-        .session_manager
-        .lock()
-        .map_err(|e| format!("Failed to lock session manager: {}", e))?;
+        let mut mgr = manager
+            .lock()
+            .map_err(|e| format!("Failed to lock session manager: {}", e))?;
 
-    manager.create_session(shell, r, c, app_handle)
+        mgr.create_session(shell, r, c, app_handle)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -32,12 +36,16 @@ pub async fn write_to_session(
     session_id: String,
     data: String,
 ) -> Result<(), String> {
-    let mut manager = state
-        .session_manager
-        .lock()
-        .map_err(|e| format!("Failed to lock session manager: {}", e))?;
+    let manager = state.session_manager.clone();
+    tokio::task::spawn_blocking(move || {
+        let mut mgr = manager
+            .lock()
+            .map_err(|e| format!("Failed to lock session manager: {}", e))?;
 
-    manager.write_to_session(&session_id, &data)
+        mgr.write_to_session(&session_id, &data)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -47,12 +55,16 @@ pub async fn resize_session(
     rows: u16,
     cols: u16,
 ) -> Result<(), String> {
-    let mut manager = state
-        .session_manager
-        .lock()
-        .map_err(|e| format!("Failed to lock session manager: {}", e))?;
+    let manager = state.session_manager.clone();
+    tokio::task::spawn_blocking(move || {
+        let mut mgr = manager
+            .lock()
+            .map_err(|e| format!("Failed to lock session manager: {}", e))?;
 
-    manager.resize_session(&session_id, rows, cols)
+        mgr.resize_session(&session_id, rows, cols)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -60,10 +72,14 @@ pub async fn close_session(
     state: State<'_, AppState>,
     session_id: String,
 ) -> Result<(), String> {
-    let mut manager = state
-        .session_manager
-        .lock()
-        .map_err(|e| format!("Failed to lock session manager: {}", e))?;
+    let manager = state.session_manager.clone();
+    tokio::task::spawn_blocking(move || {
+        let mut mgr = manager
+            .lock()
+            .map_err(|e| format!("Failed to lock session manager: {}", e))?;
 
-    manager.close_session(&session_id)
+        mgr.close_session(&session_id)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }

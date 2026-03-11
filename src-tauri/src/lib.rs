@@ -3,14 +3,14 @@ mod pty;
 
 use commands::AppState;
 use pty::SessionManager;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(AppState {
-            session_manager: Mutex::new(SessionManager::new()),
+            session_manager: Arc::new(Mutex::new(SessionManager::new())),
         })
         .invoke_handler(tauri::generate_handler![
             commands::create_session,
