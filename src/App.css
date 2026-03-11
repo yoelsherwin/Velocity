@@ -26,18 +26,53 @@ html, body, #root {
   height: 100%;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  align-items: center;
 }
 
-h1 {
-  font-size: 3rem;
-  font-weight: 700;
+.terminal-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  font-family: 'Cascadia Code', 'Consolas', 'Courier New', monospace;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.terminal-output {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
   color: #cdd6f4;
+  background-color: #1e1e2e;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 
-.subtitle {
-  font-size: 1.2rem;
+.terminal-input-row {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-top: 1px solid #313244;
+  background-color: #1e1e2e;
+}
+
+.terminal-prompt {
   color: #a6adc8;
-  margin-top: 0.5rem;
+  margin-right: 8px;
+  user-select: none;
+}
+
+.terminal-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #cdd6f4;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.terminal-input:disabled {
+  opacity: 0.5;
 }

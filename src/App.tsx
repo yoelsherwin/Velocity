@@ -1,10 +1,10 @@
 import "./App.css";
+import Terminal from "./components/Terminal";
 
 function App() {
   return (
     <main className="container">
-      <h1>Velocity</h1>
-      <p className="subtitle">Modern Terminal for Windows</p>
+      <Terminal />
     </main>
   );
 }
