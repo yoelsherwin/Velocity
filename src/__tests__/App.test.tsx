@@ -4,10 +4,10 @@ import App from "../App";
 
 test("renders Velocity heading", () => {
   render(<App />);
-  expect(screen.getByText("Velocity")).toBeDefined();
+  expect(screen.getByText("Velocity")).toBeInTheDocument();
 });
 
 test("renders subtitle", () => {
   render(<App />);
-  expect(screen.getByText("Modern Terminal for Windows")).toBeDefined();
+  expect(screen.getByText("Modern Terminal for Windows")).toBeInTheDocument();
 });
