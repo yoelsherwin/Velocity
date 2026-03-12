@@ -14,6 +14,12 @@ test.describe('Shell switching', () => {
     // Wait for CMD prompt to appear — CMD typically shows a path with ">"
     const output = appPage.getByTestId('terminal-output');
     await expect(output).toContainText('>', { timeout: 15_000 });
+
+    // Verify that CMD can actually execute a command and produce output
+    const input = appPage.getByTestId('terminal-input');
+    await input.fill('echo cmd-e2e-test');
+    await input.press('Enter');
+    await expect(output).toContainText('cmd-e2e-test', { timeout: 10_000 });
   });
 
   test('switch back to PowerShell after CMD', async ({ appPage }) => {
