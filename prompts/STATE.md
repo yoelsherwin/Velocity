@@ -26,7 +26,7 @@ Next task number: 006
 | FIX-005 | Code review fixes (tests, clipboard, dedup) | `5e6afb6` | — | — | — |
 
 ## In Progress
-None.
+TASK-006: PTY Channel Refactor + Integration Tests
 
 ## Outstanding Issues
 - **BUG-025 (Medium)**: No per-block output size limit — unbounded memory growth from single long-running command.

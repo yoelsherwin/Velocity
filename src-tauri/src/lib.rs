@@ -1,6 +1,6 @@
-mod ansi;
+pub mod ansi;
 mod commands;
-mod pty;
+pub mod pty;
 
 use commands::AppState;
 use pty::SessionManager;

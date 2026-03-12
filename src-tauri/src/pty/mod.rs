@@ -3,12 +3,27 @@ use portable_pty::{CommandBuilder, MasterPty, PtySize, Child, native_pty_system}
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc;
 use std::sync::Arc;
 use tauri::AppHandle;
 use tauri::Emitter;
 use uuid::Uuid;
 
 pub const MAX_SESSIONS: usize = 20;
+
+/// Events produced by the PTY reader thread.
+///
+/// In production, a bridge thread reads these from a channel and emits
+/// Tauri events. In tests, the test code reads directly from the channel.
+#[derive(Debug, Clone)]
+pub enum PtyEvent {
+    /// Filtered ANSI output (safe text + SGR sequences only)
+    Output(String),
+    /// Read error from the PTY
+    Error(String),
+    /// Reader thread ended (process exited or PTY closed)
+    Closed,
+}
 
 pub fn validate_dimensions(rows: u16, cols: u16) -> Result<(), String> {
     if rows < 1 || rows > 500 {
@@ -37,7 +52,7 @@ pub struct ShellSession {
     #[allow(dead_code)] // Reserved for future use (session listing, tab labels)
     pub shell_type: String,
     shutdown: Arc<AtomicBool>,
-    /// PTY reader handle — stored here until start_reading() is called.
+    /// PTY reader handle -- stored here until start_reading() is called.
     /// This is None after start_reading() takes the reader to spawn the
     /// reader thread, ensuring output is only emitted after the frontend
     /// has registered its event listeners.
@@ -46,6 +61,89 @@ pub struct ShellSession {
 
 pub struct SessionManager {
     sessions: HashMap<String, ShellSession>,
+}
+
+/// Spawn the reader thread that reads from the PTY, filters ANSI, and sends
+/// events through the channel. This is the core I/O loop used by both
+/// production (with bridge) and tests (direct channel read).
+fn spawn_reader_thread(
+    mut reader: Box<dyn Read + Send>,
+    tx: mpsc::Sender<PtyEvent>,
+    shutdown_flag: Arc<AtomicBool>,
+    session_id: String,
+) {
+    std::thread::spawn(move || {
+        let mut buf = [0u8; 4096];
+        let mut ansi_filter = AnsiFilter::new();
+        loop {
+            if shutdown_flag.load(Ordering::Relaxed) {
+                break;
+            }
+            match reader.read(&mut buf) {
+                Ok(0) => break,
+                Ok(n) => {
+                    eprintln!(
+                        "[pty:{}] raw read: {} bytes, hex: {:02x?}",
+                        session_id,
+                        n,
+                        &buf[..n.min(64)]
+                    );
+                    let output = ansi_filter.filter(&buf[..n]);
+                    eprintln!(
+                        "[pty:{}] filtered: {} bytes, empty={}",
+                        session_id,
+                        output.len(),
+                        output.is_empty()
+                    );
+                    if tx.send(PtyEvent::Output(output)).is_err() {
+                        break;
+                    }
+                }
+                Err(e) => {
+                    let _ = tx.send(PtyEvent::Error(e.to_string()));
+                    break;
+                }
+            }
+        }
+        let _ = tx.send(PtyEvent::Closed);
+    });
+}
+
+/// Spawn the bridge thread that reads PtyEvents from the channel and emits
+/// them as Tauri events to the frontend.
+fn spawn_bridge_thread(
+    rx: mpsc::Receiver<PtyEvent>,
+    app_handle: AppHandle,
+    session_id: String,
+) {
+    std::thread::spawn(move || {
+        while let Ok(event) = rx.recv() {
+            match &event {
+                PtyEvent::Output(output) => {
+                    if let Err(e) =
+                        app_handle.emit(&format!("pty:output:{}", session_id), output.clone())
+                    {
+                        eprintln!("[pty:{}] Failed to emit output: {}", session_id, e);
+                    }
+                }
+                PtyEvent::Error(err) => {
+                    if let Err(emit_err) =
+                        app_handle.emit(&format!("pty:error:{}", session_id), err.clone())
+                    {
+                        eprintln!("[pty:{}] Failed to emit error: {}", session_id, emit_err);
+                    }
+                }
+                PtyEvent::Closed => {
+                    if let Err(e) =
+                        app_handle.emit(&format!("pty:closed:{}", session_id), ())
+                    {
+                        eprintln!("[pty:{}] Failed to emit closed: {}", session_id, e);
+                    }
+                    break;
+                }
+            }
+        }
+    });
 }
 
 impl SessionManager {
@@ -145,15 +243,37 @@ impl SessionManager {
         Ok(session_id)
     }
 
+    /// Create a session and start reading immediately, returning the session ID
+    /// and event channel receiver. This is the test-friendly entry point -- it
+    /// does NOT require an AppHandle and does NOT bridge to Tauri events.
+    /// Tests read PtyEvents directly from the returned receiver.
+    ///
+    /// Combines `create_session` + `start_reading_with_channel` for convenience.
+    pub fn create_session_with_channel(
+        &mut self,
+        shell_type: &str,
+        rows: u16,
+        cols: u16,
+    ) -> Result<(String, mpsc::Receiver<PtyEvent>), String> {
+        let session_id = self.create_session(shell_type, rows, cols)?;
+        let rx = self.start_reading_with_channel(&session_id)?;
+        Ok((session_id, rx))
+    }
+
     /// Check whether a session exists.
     #[allow(dead_code)] // Used by tests
     pub fn has_session(&self, session_id: &str) -> bool {
         self.sessions.contains_key(session_id)
     }
 
-    /// Start the reader thread for a session. Must be called AFTER the
-    /// frontend has registered its event listeners, to eliminate the
-    /// race between emit and listen.
+    /// Start the reader thread for a session (production path).
+    ///
+    /// Uses channels internally: the reader thread sends PtyEvents to a
+    /// channel, and a bridge thread reads from the channel and emits
+    /// Tauri events.
+    ///
+    /// Must be called AFTER the frontend has registered its event
+    /// listeners, to eliminate the race between emit and listen.
     ///
     /// Takes the reader handle out of the session (so it can only be
     /// called once per session). Returns an error if the session doesn't
@@ -168,7 +288,7 @@ impl SessionManager {
             .get_mut(session_id)
             .ok_or_else(|| format!("Session not found: {}", session_id))?;
 
-        let mut reader = session
+        let reader = session
             .reader
             .take()
             .ok_or_else(|| "Reader already started".to_string())?;
@@ -176,48 +296,49 @@ impl SessionManager {
         let sid = session_id.to_string();
         let shutdown_flag = session.shutdown.clone();
 
-        std::thread::spawn(move || {
-            let mut buf = [0u8; 4096];
-            let mut ansi_filter = AnsiFilter::new();
-            loop {
-                if shutdown_flag.load(Ordering::Relaxed) {
-                    break;
-                }
-                match reader.read(&mut buf) {
-                    Ok(0) => break,
-                    Ok(n) => {
-                        eprintln!("[pty:{}] raw read: {} bytes, hex: {:02x?}", sid, n, &buf[..n.min(64)]);
-                        let output = ansi_filter.filter(&buf[..n]);
-                        eprintln!(
-                            "[pty:{}] filtered: {} bytes, empty={}",
-                            sid,
-                            output.len(),
-                            output.is_empty()
-                        );
-                        if let Err(e) = app_handle.emit(
-                            &format!("pty:output:{}", sid),
-                            output,
-                        ) {
-                            eprintln!("[pty:{}] Failed to emit output: {}", sid, e);
-                        }
-                    }
-                    Err(e) => {
-                        if let Err(emit_err) = app_handle.emit(
-                            &format!("pty:error:{}", sid),
-                            e.to_string(),
-                        ) {
-                            eprintln!("[pty:{}] Failed to emit error: {}", sid, emit_err);
-                        }
-                        break;
-                    }
-                }
-            }
-            if let Err(e) = app_handle.emit(&format!("pty:closed:{}", sid), ()) {
-                eprintln!("[pty:{}] Failed to emit closed: {}", sid, e);
-            }
-        });
+        // Create the channel
+        let (tx, rx) = mpsc::channel::<PtyEvent>();
+
+        // Spawn reader thread: PTY -> channel
+        spawn_reader_thread(reader, tx, shutdown_flag, sid.clone());
+
+        // Spawn bridge thread: channel -> Tauri events
+        spawn_bridge_thread(rx, app_handle, sid);
 
         Ok(())
+    }
+
+    /// Start the reader thread for a session (test path).
+    ///
+    /// Returns the channel receiver so tests can read PtyEvents directly
+    /// without needing an AppHandle or Tauri event system.
+    ///
+    /// Takes the reader handle out of the session (so it can only be
+    /// called once per session).
+    pub fn start_reading_with_channel(
+        &mut self,
+        session_id: &str,
+    ) -> Result<mpsc::Receiver<PtyEvent>, String> {
+        let session = self
+            .sessions
+            .get_mut(session_id)
+            .ok_or_else(|| format!("Session not found: {}", session_id))?;
+
+        let reader = session
+            .reader
+            .take()
+            .ok_or_else(|| "Reader already started".to_string())?;
+
+        let sid = session_id.to_string();
+        let shutdown_flag = session.shutdown.clone();
+
+        // Create the channel
+        let (tx, rx) = mpsc::channel::<PtyEvent>();
+
+        // Spawn reader thread: PTY -> channel (no bridge, test reads directly)
+        spawn_reader_thread(reader, tx, shutdown_flag, sid);
+
+        Ok(rx)
     }
 
     pub fn write_to_session(&mut self, session_id: &str, data: &str) -> Result<(), String> {
@@ -269,7 +390,7 @@ impl SessionManager {
         // Signal reader thread to stop
         session.shutdown.store(true, Ordering::Relaxed);
 
-        // Kill the child process — ignore errors (may already be dead)
+        // Kill the child process -- ignore errors (may already be dead)
         let _ = session.child.kill();
 
         // Wait for child to exit to avoid zombie process handles
@@ -277,7 +398,7 @@ impl SessionManager {
         match session.child.try_wait() {
             Ok(Some(_status)) => {} // Exited cleanly
             _ => {
-                // Force wait — blocking but should be fast after kill
+                // Force wait -- blocking but should be fast after kill
                 let _ = session.child.wait();
             }
         }
@@ -379,10 +500,10 @@ mod tests {
     #[test]
     #[ignore]
     fn test_spawn_powershell_session() {
-        // Integration test — requires Tauri AppHandle for event emission
-        // This test must be run manually with `cargo test -- --ignored`
-        // in an environment where PowerShell is available
-        todo!("Integration test: requires Tauri AppHandle for event emission")
+        // Integration test -- moved to src-tauri/tests/pty_integration.rs
+        // This test is superseded by the real integration tests that use channels.
+        // Kept as ignored for backwards compatibility.
+        todo!("Superseded by integration tests in tests/pty_integration.rs")
     }
 
     #[test]
@@ -447,5 +568,22 @@ mod tests {
         let result = validate_dimensions(24, 501);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Invalid cols"));
+    }
+
+    #[test]
+    fn test_pty_event_variants() {
+        // Verify PtyEvent enum can be constructed and Debug-printed
+        let output = PtyEvent::Output("hello".to_string());
+        let error = PtyEvent::Error("something went wrong".to_string());
+        let closed = PtyEvent::Closed;
+
+        // Debug must work (derive(Debug) check)
+        assert!(format!("{:?}", output).contains("Output"));
+        assert!(format!("{:?}", error).contains("Error"));
+        assert!(format!("{:?}", closed).contains("Closed"));
+
+        // Clone must work (derive(Clone) check)
+        let output_clone = output.clone();
+        assert!(format!("{:?}", output_clone).contains("Output"));
     }
 }
