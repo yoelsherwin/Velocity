@@ -15,11 +15,15 @@ function BlockView({ block, isActive, onRerun }: BlockViewProps) {
   }, [block.timestamp]);
 
   const handleCopyCommand = useCallback(() => {
-    navigator.clipboard.writeText(block.command);
+    navigator.clipboard.writeText(block.command).catch(() => {
+      // Clipboard write failed — silently ignore (user can manually select + copy)
+    });
   }, [block.command]);
 
   const handleCopyOutput = useCallback(() => {
-    navigator.clipboard.writeText(stripAnsi(block.output));
+    navigator.clipboard.writeText(stripAnsi(block.output)).catch(() => {
+      // Clipboard write failed — silently ignore
+    });
   }, [block.output]);
 
   const handleRerun = useCallback(() => {

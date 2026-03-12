@@ -161,9 +161,9 @@ function Terminal() {
     await resetAndStart(shellType);
   }, [shellType, resetAndStart]);
 
-  const handleRerun = useCallback(
+  const submitCommand = useCallback(
     (command: string) => {
-      if (!sessionId || closed) return;
+      if (!sessionIdRef.current || closed) return;
       const newBlock = createBlock(command, shellType);
       // Finalize current active block, add new block, enforce limit
       setBlocks((prev) => {
@@ -178,7 +178,7 @@ function Terminal() {
           : withNew;
       });
       activeBlockIdRef.current = newBlock.id;
-      writeToSession(sessionId, command + '\r').catch((err) => {
+      writeToSession(sessionIdRef.current, command + '\r').catch((err) => {
         setBlocks((prev) =>
           prev.map((b) =>
             b.id === newBlock.id
@@ -188,42 +188,24 @@ function Terminal() {
         );
       });
     },
-    [sessionId, closed, shellType],
+    [closed, shellType],
+  );
+
+  const handleRerun = useCallback(
+    (command: string) => {
+      submitCommand(command);
+    },
+    [submitCommand],
   );
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === 'Enter' && sessionId && !closed) {
-        const command = input;
-        const newBlock = createBlock(command, shellType);
-
-        // Finalize current active block, add new block, enforce limit
-        setBlocks((prev) => {
-          const updated = prev.map((b) =>
-            b.id === activeBlockIdRef.current
-              ? { ...b, status: 'completed' as const }
-              : b,
-          );
-          const withNew = [...updated, newBlock];
-          return withNew.length > MAX_BLOCKS
-            ? withNew.slice(-MAX_BLOCKS)
-            : withNew;
-        });
-        activeBlockIdRef.current = newBlock.id;
-
-        writeToSession(sessionId, command + '\r').catch((err) => {
-          setBlocks((prev) =>
-            prev.map((b) =>
-              b.id === newBlock.id
-                ? { ...b, output: b.output + `\n[Write error: ${err}]\n` }
-                : b,
-            ),
-          );
-        });
+      if (e.key === 'Enter' && sessionIdRef.current && !closed) {
+        submitCommand(input);
         setInput('');
       }
     },
-    [sessionId, input, closed, shellType],
+    [submitCommand, input, closed],
   );
 
   return (

@@ -20,7 +20,7 @@ vi.mock('@tauri-apps/api/event', () => ({
   listen: (...args: unknown[]) => mockListen(...args),
 }));
 
-import Terminal from '../components/Terminal';
+import Terminal, { MAX_BLOCKS } from '../components/Terminal';
 
 describe('Terminal Component', () => {
   beforeEach(() => {
@@ -327,10 +327,7 @@ describe('Terminal Component', () => {
   });
 
   it('test_blocks_limited_to_max', () => {
-    // Verify the MAX_BLOCKS constant exists and is 50
-    // We import it from Terminal module — but since it's a component,
-    // we test by verifying the behavior indirectly.
-    // For now, verify the constant value via the module.
-    expect(50).toBe(50); // MAX_BLOCKS should be 50
+    // Verify the MAX_BLOCKS constant is exported and has the expected value
+    expect(MAX_BLOCKS).toBe(50);
   });
 });
