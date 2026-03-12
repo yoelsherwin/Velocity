@@ -255,8 +255,13 @@ Include function signatures, parameter types, and return types.]
 
 ## Tests (Write These FIRST)
 The dev agent MUST write these tests before any implementation code.
+See `prompts/TESTING.md` for the full testing strategy.
 
-### Rust Tests (cargo test)
+### Rust Integration Tests (real PTY, no mocks — REQUIRED for backend tasks)
+- [ ] [Specific test: spawn real shell, send input, verify output]
+- [ ] [Specific test: ...]
+
+### Rust Unit Tests (cargo test)
 - [ ] [Specific test: what function, what input, what expected output]
 - [ ] [Specific test: ...]
 
@@ -266,6 +271,10 @@ The dev agent MUST write these tests before any implementation code.
 
 ### E2E Tests (Playwright) — if applicable
 - [ ] [Specific test: what user action, what expected result]
+
+**IMPORTANT**: Do NOT rely solely on mocked tests for backend functionality.
+Any task that touches PTY, IPC commands, or process management MUST include
+Rust integration tests with real shell processes.
 
 ## Acceptance Criteria
 - [ ] All tests above are written and passing

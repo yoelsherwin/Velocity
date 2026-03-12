@@ -51,14 +51,23 @@ Before writing code, briefly state your implementation plan:
 
 The task file includes a "Tests (Write These FIRST)" section with specific tests the CTO has designed. Write every one of them. If the task doesn't specify tests, design them yourself based on the requirements — but they must exist before implementation begins.
 
-**Rust tests (cargo test):**
-- Write unit tests for every function/module the task requires
-- Tests go in the same file (`#[cfg(test)] mod tests`) or a `tests/` directory
+**Rust integration tests (REQUIRED for any backend/PTY/IPC work):**
+- Tests go in `src-tauri/tests/` (integration test directory)
+- Use real PTY processes, real ANSI filtering, real session management — NO mocks
+- Test with actual shell commands (e.g., `echo hello`, `exit`)
+- Verify real output, real process lifecycle, real cleanup
+- See `prompts/TESTING.md` Layer 1 for patterns
+
+**Rust unit tests (cargo test):**
+- Write unit tests for pure logic functions
+- Tests go in the same file (`#[cfg(test)] mod tests`)
+- OK to test validation, parsing, data structures in isolation
 
 **Frontend tests (Vitest):**
 - Write component rendering tests
 - Write hook behavior tests
-- Mock `invoke` for IPC interaction tests
+- Mock `invoke` for UI-only behavior tests
+- **Do NOT rely on mocked IPC tests to verify backend behavior** — that's what Rust integration tests are for
 
 **E2E tests (Playwright):**
 - Write user-visible behavior tests if the task involves UI interaction
