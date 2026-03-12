@@ -1,3 +1,4 @@
+import React from 'react';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -329,5 +330,63 @@ describe('Terminal Component', () => {
   it('test_blocks_limited_to_max', () => {
     // Verify the MAX_BLOCKS constant is exported and has the expected value
     expect(MAX_BLOCKS).toBe(50);
+  });
+
+  // --- FIX-007: StrictMode double-mount cancellation test ---
+
+  it('test_startSession_cancels_on_remount', async () => {
+    // Simulate StrictMode double-mount: createSession returns different IDs
+    // for each call, and the first session should be cleaned up.
+    mockCreateSession
+      .mockResolvedValueOnce('session-mount-1')
+      .mockResolvedValueOnce('session-mount-2');
+
+    const unlistenFns = [vi.fn(), vi.fn(), vi.fn(), vi.fn(), vi.fn(), vi.fn()];
+    let unlistenIdx = 0;
+    mockListen.mockImplementation(
+      async (eventName: string, callback: ListenerCallback) => {
+        eventListeners[eventName] = callback;
+        return unlistenFns[unlistenIdx++] || vi.fn();
+      },
+    );
+
+    // Render in StrictMode to trigger double-mount
+    await act(async () => {
+      render(
+        <React.StrictMode>
+          <Terminal />
+        </React.StrictMode>,
+      );
+    });
+
+    // Wait for session creation to complete
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalledTimes(2);
+    });
+
+    // The first session should have been closed (either by the cleanup or
+    // by the second startSession's invocation guard)
+    await waitFor(() => {
+      expect(mockCloseSession).toHaveBeenCalledWith('session-mount-1');
+    });
+
+    // Only the second session's listeners should be active
+    // Verify listeners are registered for session-mount-2
+    expect(eventListeners).toHaveProperty('pty:output:session-mount-2');
+    expect(eventListeners).toHaveProperty('pty:error:session-mount-2');
+    expect(eventListeners).toHaveProperty('pty:closed:session-mount-2');
+
+    // The second session should still work — simulate output
+    await act(async () => {
+      const outputCallback = eventListeners['pty:output:session-mount-2'];
+      if (outputCallback) {
+        outputCallback({ payload: 'PS C:\\> ' });
+      }
+    });
+
+    await waitFor(() => {
+      const output = screen.getByTestId('terminal-output');
+      expect(output.textContent).toContain('PS C:\\>');
+    });
   });
 });

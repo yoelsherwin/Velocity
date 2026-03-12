@@ -129,21 +129,29 @@ impl SessionManager {
                     Ok(0) => break,
                     Ok(n) => {
                         let output = ansi_filter.filter(&buf[..n]);
-                        let _ = app_handle.emit(
-                            &format!("pty:output:{}", sid),
-                            output,
-                        );
+                        if !output.is_empty() {
+                            if let Err(e) = app_handle.emit(
+                                &format!("pty:output:{}", sid),
+                                output,
+                            ) {
+                                eprintln!("[pty:{}] Failed to emit output: {}", sid, e);
+                            }
+                        }
                     }
                     Err(e) => {
-                        let _ = app_handle.emit(
+                        if let Err(emit_err) = app_handle.emit(
                             &format!("pty:error:{}", sid),
                             e.to_string(),
-                        );
+                        ) {
+                            eprintln!("[pty:{}] Failed to emit error: {}", sid, emit_err);
+                        }
                         break;
                     }
                 }
             }
-            let _ = app_handle.emit(&format!("pty:closed:{}", sid), ());
+            if let Err(e) = app_handle.emit(&format!("pty:closed:{}", sid), ()) {
+                eprintln!("[pty:{}] Failed to emit closed: {}", sid, e);
+            }
         });
 
         let session = ShellSession {

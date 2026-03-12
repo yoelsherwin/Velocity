@@ -33,6 +33,7 @@ function Terminal() {
   const [closed, setClosed] = useState(false);
   const outputRef = useRef<HTMLDivElement>(null);
   const unlistenRefs = useRef<(() => void)[]>([]);
+  const startSessionIdRef = useRef(0);
 
   const updateSessionId = useCallback((id: string | null) => {
     sessionIdRef.current = id;
@@ -48,8 +49,24 @@ function Terminal() {
 
   const startSession = useCallback(
     async (shell: ShellType) => {
+      const thisInvocation = ++startSessionIdRef.current;
+
+      // Close any existing session first to prevent leaks
+      if (sessionIdRef.current) {
+        cleanupListeners();
+        await closeSession(sessionIdRef.current).catch(() => {});
+        updateSessionId(null);
+      }
+
       try {
         const sid = await createSession(shell, 24, 80);
+
+        // Bail if this invocation was superseded (e.g., by StrictMode remount)
+        if (startSessionIdRef.current !== thisInvocation) {
+          closeSession(sid).catch(() => {});
+          return;
+        }
+
         updateSessionId(sid);
         setClosed(false);
 
@@ -57,6 +74,9 @@ function Terminal() {
         const welcomeBlock = createBlock('', shell);
         activeBlockIdRef.current = welcomeBlock.id;
         setBlocks([welcomeBlock]);
+
+        // Clean up any previous listeners before setting new ones
+        cleanupListeners();
 
         const unlistenOutput = await listen<string>(
           `pty:output:${sid}`,
@@ -71,6 +91,13 @@ function Terminal() {
           },
         );
 
+        // Check again after async listen
+        if (startSessionIdRef.current !== thisInvocation) {
+          unlistenOutput();
+          closeSession(sid).catch(() => {});
+          return;
+        }
+
         const unlistenError = await listen<string>(
           `pty:error:${sid}`,
           (event) => {
@@ -84,6 +111,14 @@ function Terminal() {
           },
         );
 
+        // Check again after async listen
+        if (startSessionIdRef.current !== thisInvocation) {
+          unlistenOutput();
+          unlistenError();
+          closeSession(sid).catch(() => {});
+          return;
+        }
+
         const unlistenClosed = await listen<void>(
           `pty:closed:${sid}`,
           () => {
@@ -91,8 +126,20 @@ function Terminal() {
           },
         );
 
+        // Check again after async listen
+        if (startSessionIdRef.current !== thisInvocation) {
+          unlistenOutput();
+          unlistenError();
+          unlistenClosed();
+          closeSession(sid).catch(() => {});
+          return;
+        }
+
         unlistenRefs.current = [unlistenOutput, unlistenError, unlistenClosed];
       } catch (err) {
+        // Bail if this invocation was superseded
+        if (startSessionIdRef.current !== thisInvocation) return;
+
         const errorBlock = createBlock('', shell);
         errorBlock.output = `[Failed to create session: ${err}]`;
         errorBlock.status = 'completed';
@@ -100,11 +147,14 @@ function Terminal() {
         setBlocks([errorBlock]);
       }
     },
-    [updateSessionId],
+    [updateSessionId, cleanupListeners],
   );
 
   const resetAndStart = useCallback(
     async (shell: ShellType) => {
+      // Increment counter to cancel any in-flight startSession
+      startSessionIdRef.current++;
+
       if (sessionIdRef.current) {
         await closeSession(sessionIdRef.current).catch(() => {});
       }
@@ -121,17 +171,11 @@ function Terminal() {
 
   // Initialize session on mount
   useEffect(() => {
-    let mounted = true;
-
-    async function init() {
-      if (!mounted) return;
-      await startSession('powershell');
-    }
-
-    init();
+    startSession('powershell');
 
     return () => {
-      mounted = false;
+      // Invalidate any in-flight startSession from this mount
+      startSessionIdRef.current++;
       cleanupListeners();
       // Close session on unmount — best-effort, using ref for current value
       if (sessionIdRef.current) {
