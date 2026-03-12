@@ -4,44 +4,59 @@
 > Last updated at: `2026-03-12`
 
 ## Current Phase
-Feature development — Pillar 1 (Process Interfacing) in progress.
+Feature development — Pillar 2 (Block Model) **COMPLETE** (2a + 2b + 2d done; 2c deferred to shell integration).
 
 ## Backlog Position
-Pillar: 1 (Process Interfacing)
-Next task number: 004
-Remaining sub-tasks: 1d (process lifecycle — restart), 1e (CMD/WSL testing)
+Pillar: 3 (Decoupled Input Editor)
+Next task number: 006
 
 ## Completed Tasks
 
 | Task | Description | Commit | Code Review | Security Review | QA |
 |------|-------------|--------|-------------|-----------------|-----|
-| TASK-001 | Bootstrap project (Tauri v2 + React/TS) | `2b46797` | APPROVED R2 | PASS R1 | N/A (bootstrap) |
-| FIX-001 | Code review fixes (CSP, gitignore, jest-dom) | `c98cfc8` | (part of TASK-001 R2) | (part of TASK-001 R1) | N/A |
-| TASK-002 | PTY engine — spawn and stream | `da21113` | APPROVED R2 | PASS R1 | N/A (combined with TASK-003) |
-| FIX-002 | Code review fixes (async safety, resource cleanup) | `c65cc00` | (part of TASK-002 R2) | (part of TASK-002 R1) | N/A |
-| TASK-003 | ANSI security filter + color rendering | `7ddb968` | APPROVED R2 | PASS R1 | PASS (2026-03-12) |
-| FIX-003 | Code review fixes (memoization, backspace, parser state) | `cc00770` | (part of TASK-003 R2) | (part of TASK-003 R1) | (part of QA 2026-03-12) |
+| TASK-001 | Bootstrap project (Tauri v2 + React/TS) | `2b46797` | APPROVED R2 | PASS R1 | N/A |
+| FIX-001 | Code review fixes (CSP, gitignore, jest-dom) | `c98cfc8` | — | — | — |
+| TASK-002 | PTY engine — spawn and stream | `da21113` | APPROVED R2 | PASS R1 | N/A |
+| FIX-002 | Code review fixes (async safety, resource cleanup) | `c65cc00` | — | — | — |
+| TASK-003 | ANSI security filter + color rendering | `7ddb968` | APPROVED R2 | PASS R1 | PASS R1 |
+| FIX-003 | Code review fixes (memoization, backspace, parser state) | `cc00770` | — | — | — |
+| TASK-004 | Process lifecycle + shell selection + input validation | `85c34dd` | APPROVED R2 | PASS R1 | PASS R2 |
+| FIX-004 | Code review fixes (session ref, ARIA, type safety) | `4953590` | — | — | — |
+| TASK-005 | Block model — command/output containers | `6db813d` | APPROVED R2 | PASS R1 | PASS R3 |
+| FIX-005 | Code review fixes (tests, clipboard, dedup) | `5e6afb6` | — | — | — |
 
 ## In Progress
 None.
 
 ## Outstanding Issues
-- **BUG-006 (Medium)**: No input validation for `rows`/`cols` in `create_session`/`resize_session` — 0 or extreme values accepted. Could cause PTY crash.
-- **BUG-004 (Medium)**: Full output buffer re-parse on every PTY event. Mitigated by `useMemo` but still O(n) when text changes. Incremental parsing deferred.
-- **Security M-1**: Color string validation in `src/lib/ansi.ts` relies on Anser behavior (defense-in-depth).
-- **Security M-2**: `unsafe-inline` in `style-src` CSP (accepted risk, monitor during future rendering changes).
-- **QA BUG-007 (Low)**: `resize_session` exists but is never called from the frontend.
+- **BUG-025 (Medium)**: No per-block output size limit — unbounded memory growth from single long-running command.
+- **BUG-020 (Medium)**: Welcome block retains `running` status after session close.
+- **BUG-015 (Medium)**: Input field active after session creation failure — no error indication.
+- **BUG-022 (Medium)**: Rapid shell switching race creates orphaned blocks (extension of BUG-009).
+- **BUG-017 (Low)**: Empty Enter creates block identical to welcome block.
+- **BUG-009 (Medium)**: Rapid shell switching orphans sessions (carried from R2).
+- **BUG-004 (Medium)**: Full ANSI re-parse per PTY event (perf, carried from R1).
+- **Security M-1 (TASK-005)**: Rerun without confirmation (accepted, industry standard).
+- **Security M-2 (TASK-005)**: Unbounded per-block output (same as BUG-025).
+
+## Pillar Status
+
+| Pillar | Status | Notes |
+|--------|--------|-------|
+| 1. Process Interfacing | **COMPLETE** | PTY, streaming, ANSI filter, lifecycle, shells |
+| 2. Block Model | **COMPLETE** (MVP) | Blocks, copy/rerun actions. Exit codes deferred (needs shell integration). |
+| 3. Input Editor | Not started | Next up |
+| 4. Layout (Tabs/Panes) | Not started | |
+| 5. Agent Mode | Not started | |
 
 ## Last Security Review
-- Scope: TASK-003 (ANSI filter)
-- Commit range: `c65cc00..cc00770`
-- HEAD at review: `cc00770`
-- Report: `prompts/reports/security-reviews/SECURITY-REVIEW-TASK-003-ansi-filter-R1.md`
+- Scope: TASK-005 (block model)
+- Commit range: `4953590..5e6afb6`
+- HEAD at review: `5e6afb6`
+- Report: `prompts/reports/security-reviews/SECURITY-REVIEW-TASK-005-block-model-R1.md`
 
 ## Notes
-- Pillar 1 sub-tasks 1a (spawn), 1b (stream), 1c (ANSI) are complete.
-- 1d (process lifecycle) partially done: kill works, restart not implemented.
-- 1e (CMD/WSL) code exists but is untested.
-- Rust toolchain may need `winget install Rustlang.Rustup` on fresh machines.
-- `tauri-plugin-opener` has been removed (security review L-4).
-- 42 total tests passing (18 frontend + 26 Rust).
+- 70 total tests passing (39 frontend + 31 Rust).
+- Pillar 2 sub-task 2c (exit code + timestamp display) partially done: timestamp shows, exit code deferred to shell integration.
+- Block count capped at MAX_BLOCKS=50. Per-block output unbounded (BUG-025).
+- No Rust changes in Pillar 2 — entirely frontend.

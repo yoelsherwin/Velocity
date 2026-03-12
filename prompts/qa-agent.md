@@ -158,7 +158,11 @@ EOF
 
 ### Step 7: Write QA Report
 
-Save your report to `prompts/reports/qa-reports/QA-REPORT-<date>.md`:
+**Naming convention:** `QA-REPORT-<scope>-R<N>.md`
+
+Before writing, check `prompts/reports/qa-reports/` to determine the scope name and round number. The scope should match the tasks being tested (e.g., `QA-REPORT-TASK-003-ansi-filter-R1.md` or `QA-REPORT-PILLAR-1-process-engine-R1.md`). Derive the scope from the most recent commits or the feature area. If a report with the same scope exists, increment the round number.
+
+Save your report to `prompts/reports/qa-reports/`:
 
 ```markdown
 # QA Report — [Date]

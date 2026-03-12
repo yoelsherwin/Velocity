@@ -155,7 +155,7 @@ C:\Velocity\
 │   └── reports/
 │       ├── code-reviews/    ← CODE-REVIEW-TASK-001-pty-engine-R1.md
 │       ├── security-reviews/← SECURITY-REVIEW-PILLAR-1-process-engine-R1.md
-│       └── qa-reports/      ← QA-REPORT-2025-01-15.md
+│       └── qa-reports/      ← QA-REPORT-TASK-003-ansi-filter-R1.md
 ├── src/                     ← React/TypeScript frontend
 ├── src-tauri/               ← Rust/Tauri backend
 └── CLAUDE.md                ← Project-level Claude Code config
