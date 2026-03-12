@@ -18,7 +18,7 @@ describe('IPC Wrapper: pty.ts', () => {
     mockedInvoke.mockResolvedValueOnce('test-session-id');
     await createSession('powershell', 24, 80);
     expect(mockedInvoke).toHaveBeenCalledWith('create_session', {
-      shell_type: 'powershell',
+      shellType: 'powershell',
       rows: 24,
       cols: 80,
     });
@@ -28,7 +28,7 @@ describe('IPC Wrapper: pty.ts', () => {
     mockedInvoke.mockResolvedValueOnce(undefined);
     await writeToSession('abc-123', 'dir\r');
     expect(mockedInvoke).toHaveBeenCalledWith('write_to_session', {
-      session_id: 'abc-123',
+      sessionId: 'abc-123',
       data: 'dir\r',
     });
   });
@@ -37,7 +37,7 @@ describe('IPC Wrapper: pty.ts', () => {
     mockedInvoke.mockResolvedValueOnce('test-session-id');
     await createSession();
     expect(mockedInvoke).toHaveBeenCalledWith('create_session', {
-      shell_type: undefined,
+      shellType: undefined,
       rows: undefined,
       cols: undefined,
     });
@@ -47,7 +47,7 @@ describe('IPC Wrapper: pty.ts', () => {
     mockedInvoke.mockResolvedValueOnce(undefined);
     await resizeSession('abc-123', 40, 120);
     expect(mockedInvoke).toHaveBeenCalledWith('resize_session', {
-      session_id: 'abc-123',
+      sessionId: 'abc-123',
       rows: 40,
       cols: 120,
     });
@@ -57,7 +57,7 @@ describe('IPC Wrapper: pty.ts', () => {
     mockedInvoke.mockResolvedValueOnce(undefined);
     await closeSession('abc-123');
     expect(mockedInvoke).toHaveBeenCalledWith('close_session', {
-      session_id: 'abc-123',
+      sessionId: 'abc-123',
     });
   });
 });

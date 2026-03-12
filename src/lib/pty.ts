@@ -7,7 +7,7 @@ export async function createSession(
   cols?: number,
 ): Promise<string> {
   return invoke<string>('create_session', {
-    shell_type: shellType,
+    shellType,
     rows,
     cols,
   });
@@ -18,7 +18,7 @@ export async function writeToSession(
   data: string,
 ): Promise<void> {
   return invoke<void>('write_to_session', {
-    session_id: sessionId,
+    sessionId,
     data,
   });
 }
@@ -29,7 +29,7 @@ export async function resizeSession(
   cols: number,
 ): Promise<void> {
   return invoke<void>('resize_session', {
-    session_id: sessionId,
+    sessionId,
     rows,
     cols,
   });
@@ -37,6 +37,6 @@ export async function resizeSession(
 
 export async function closeSession(sessionId: string): Promise<void> {
   return invoke<void>('close_session', {
-    session_id: sessionId,
+    sessionId,
   });
 }
