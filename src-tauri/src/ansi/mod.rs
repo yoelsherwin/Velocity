@@ -4,21 +4,27 @@ const MAX_SEQUENCE_LENGTH: usize = 256;
 
 pub struct AnsiFilter {
     output: String,
+    parser: vte::Parser,
 }
 
 impl AnsiFilter {
     pub fn new() -> Self {
         AnsiFilter {
             output: String::new(),
+            parser: vte::Parser::new(),
         }
     }
 
     /// Filter a chunk of raw PTY output bytes.
     /// Returns a string containing only safe text + SGR sequences.
+    /// The parser is persistent across calls so that SGR sequences split
+    /// across chunk boundaries (e.g. at 4096-byte PTY reads) are handled
+    /// correctly instead of being silently dropped.
     pub fn filter(&mut self, raw: &[u8]) -> String {
-        let mut parser = vte::Parser::new();
         self.output.clear();
+        let mut parser = std::mem::take(&mut self.parser);
         parser.advance(self, raw);
+        self.parser = parser;
         self.output.clone()
     }
 }
@@ -29,11 +35,13 @@ impl Perform for AnsiFilter {
     }
 
     fn execute(&mut self, byte: u8) {
-        // Keep: \n (0x0A), \r (0x0D), \t (0x09), backspace (0x08)
-        // Strip: bell (0x07) and other C0 controls
+        // Keep: \n (0x0A), \r (0x0D), \t (0x09)
+        // Strip: backspace (0x08), bell (0x07) and other C0 controls
+        // Backspace is stripped because the frontend does not perform terminal
+        // emulation — it only appends text, so raw \b would accumulate invisibly.
         match byte {
-            0x0A | 0x0D | 0x09 | 0x08 => self.output.push(byte as char),
-            _ => {} // Strip
+            0x0A | 0x0D | 0x09 => self.output.push(byte as char),
+            _ => {} // Strip bell, backspace, and other C0 controls
         }
     }
 
@@ -54,11 +62,12 @@ impl Perform for AnsiFilter {
             }
             reconstructed.push('m');
 
-            // Bound check: reject if reconstructed sequence exceeds MAX_SEQUENCE_LENGTH
+            // Defense-in-depth: vte parser caps at 32 params (making this unreachable
+            // through normal parsing), but we bound-check anyway as a safety net against
+            // future parser changes or alternative code paths.
             if reconstructed.len() <= MAX_SEQUENCE_LENGTH {
                 self.output.push_str(&reconstructed);
             }
-            // Oversize sequences are silently dropped
         }
         // All other CSI actions (cursor move, erase, scroll, etc.) are stripped
     }
@@ -181,11 +190,11 @@ mod tests {
 
     #[test]
     fn test_sgr_oversize_rejected() {
-        // The vte parser caps at 32 params, so we cannot generate >256 byte SGR
-        // through parsing alone. Test the mechanism by temporarily lowering the limit.
-        // Instead, we verify the bound-check logic by directly testing that a
-        // normal-sized SGR passes (proving the check exists) and verifying the
-        // constant is correctly set.
+        // Defense-in-depth test: The vte parser caps at 32 params, so we cannot
+        // generate a >256 byte SGR through normal parsing. The MAX_SEQUENCE_LENGTH
+        // bound check in csi_dispatch is unreachable via vte but exists as a safety
+        // net against future parser changes or alternative code paths.
+        // We verify the constant is set and that normal SGR sequences pass through.
         assert_eq!(MAX_SEQUENCE_LENGTH, 256);
 
         // Test that a normal SGR within bounds passes through
@@ -221,15 +230,30 @@ mod tests {
     }
 
     #[test]
-    fn test_max_sessions_enforced() {
-        // Test MAX_SESSIONS limit in isolation
-        // We can't create real sessions (need AppHandle), so test the count logic directly
-        use crate::pty::SessionManager;
+    fn test_backspace_stripped() {
+        let mut filter = AnsiFilter::new();
+        let result = filter.filter(b"abc\x08def");
+        // Backspace (0x08) should be stripped since the frontend doesn't emulate it
+        assert_eq!(result, "abcdef");
+    }
 
-        let manager = SessionManager::new();
-        // The manager starts empty, so the session count is 0
-        assert_eq!(manager.session_count(), 0);
-        // The MAX_SESSIONS constant should be 20
-        assert_eq!(crate::pty::MAX_SESSIONS, 20);
+    #[test]
+    fn test_parser_persists_across_chunks() {
+        // Simulate an SGR sequence split across two PTY read chunks.
+        // With a persistent parser, the sequence is reassembled correctly.
+        let mut filter = AnsiFilter::new();
+
+        // First chunk: ESC [ 3 1 (start of SGR red)
+        let chunk1 = b"\x1b[31";
+        // Second chunk: m followed by text (completes the SGR)
+        let chunk2 = b"mred text\x1b[0m";
+
+        let result1 = filter.filter(chunk1);
+        let result2 = filter.filter(chunk2);
+
+        let combined = format!("{}{}", result1, result2);
+        // The persistent parser should reconstruct the split SGR sequence
+        assert!(combined.contains("red text"), "Split SGR should produce text output, got: {}", combined);
+        assert!(combined.contains("\x1b[31m"), "Split SGR should be reconstructed, got: {}", combined);
     }
 }

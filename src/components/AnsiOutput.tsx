@@ -1,3 +1,4 @@
+import React, { useMemo } from 'react';
 import { parseAnsi } from '../lib/ansi';
 
 interface AnsiOutputProps {
@@ -5,7 +6,7 @@ interface AnsiOutputProps {
 }
 
 function AnsiOutput({ text }: AnsiOutputProps) {
-  const spans = parseAnsi(text);
+  const spans = useMemo(() => parseAnsi(text), [text]);
   return (
     <>
       {spans.map((span, i) => (
@@ -27,4 +28,4 @@ function AnsiOutput({ text }: AnsiOutputProps) {
   );
 }
 
-export default AnsiOutput;
+export default React.memo(AnsiOutput);

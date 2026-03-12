@@ -16,10 +16,8 @@ export interface AnsiSpan {
  * (only SGR sequences remain).
  */
 export function parseAnsi(text: string): AnsiSpan[] {
-  const parsed = Anser.ansiToJson(text, { use_classes: false });
-  return parsed
-    .filter((entry) => entry.content.length > 0)
-    .map((entry) => {
+  const parsed = Anser.ansiToJson(text, { use_classes: false, remove_empty: true });
+  return parsed.map((entry) => {
       const span: AnsiSpan = {
         content: entry.content,
       };
