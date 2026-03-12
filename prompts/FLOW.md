@@ -18,6 +18,7 @@ The core idea: a persistent CTO session plans and orchestrates, ephemeral agents
 | **Developer** | Subagent | 1 feature | Explores codebase, writes tests, implements, commits. Fresh context every time. |
 | **Code Reviewer** | Subagent | 1 review | Reviews git diff for quality, patterns, and correctness. |
 | **Security Reviewer** | Subagent | 1 review | Dedicated security audit — command injection, IPC attack surface, escape sequence exploits. |
+| **Investigator** | Subagent | 1 issue | Senior architect: traces code paths, identifies root causes, writes analysis. Never fixes — only reports. |
 | **QA** | Subagent | 1 cycle | Runs tests, analyzes code for bugs, writes manual test plans, files issues. |
 
 ---
@@ -119,6 +120,7 @@ The slash commands still work if you want to run an agent manually:
 | `/dev <filename>` | Developer | Manual: `/dev TASK-001-pty-engine.md` |
 | `/code-review` | Code Reviewer | Manual: reviews latest git diff |
 | `/security-review` | Security Reviewer | Manual: audits codebase |
+| `/investigate <issue>` | Investigator | Traces code paths, finds root causes, writes report |
 | `/qa` | QA | Manual: runs tests and hunts bugs |
 
 ---
@@ -150,12 +152,14 @@ C:\Velocity\
 │   ├── dev-agent.md         ← Dev agent template
 │   ├── code-reviewer.md     ← Code reviewer template
 │   ├── security-reviewer.md ← Security audit template
+│   ├── investigator.md      ← Investigation/root cause analysis template
 │   ├── qa-agent.md          ← QA agent template
 │   ├── tasks/               ← CTO writes task prompts here
 │   │   └── TASK-001-pty-engine.md
 │   └── reports/
 │       ├── code-reviews/    ← CODE-REVIEW-TASK-001-pty-engine-R1.md
 │       ├── security-reviews/← SECURITY-REVIEW-PILLAR-1-process-engine-R1.md
+│       ├── investigations/  ← INVESTIGATION-pty-output-garbled.md
 │       └── qa-reports/      ← QA-REPORT-TASK-003-ansi-filter-R1.md
 ├── src/                     ← React/TypeScript frontend
 ├── src-tauri/               ← Rust/Tauri backend
@@ -201,6 +205,7 @@ In manual mode:
 | Dev | Open new session, type `/dev TASK-NNN.md` |
 | Code Review | Open new session, type `/code-review` |
 | Security Review | Open new session, type `/security-review`, paste scope from CTO |
+| Investigate | Open new session, type `/investigate <describe the issue>` |
 | QA | Open new session, type `/qa` |
 | Report back | Tell CTO: "Code review for TASK-NNN is done. Review it." |
 

@@ -30,4 +30,4 @@ Modern Windows terminal application (Warp-equivalent), built with Tauri v2 + Rea
 
 ## Development Workflow
 See `prompts/FLOW.md` for the multi-agent development workflow.
-Agent prompts are in `prompts/` (cto.md, dev-agent.md, code-reviewer.md, security-reviewer.md, qa-agent.md).
+Agent prompts are in `prompts/` (cto.md, dev-agent.md, code-reviewer.md, security-reviewer.md, investigator.md, qa-agent.md).

@@ -217,6 +217,24 @@ You run the entire development pipeline by spawning agents via the **Task tool**
 2. Write a fix task with the fix prompt format (see below)
 3. Combine dev-agent.md + fix task, spawn via Task tool
 
+**Investigator (for issues, unknowns, or architecture questions):**
+1. Read `prompts/investigator.md`
+2. Use the Task tool:
+   - `subagent_type`: `general-purpose`
+   - `description`: `Investigate: <topic>`
+   - `prompt`: investigator.md content with the issue description replacing `$ARGUMENTS`
+3. After completion, read the report from `prompts/reports/investigations/`
+4. Use the findings to write a targeted fix prompt or adjust the plan
+
+**When to use the Investigator instead of a Fix Agent:**
+- You don't know the root cause yet — the symptom is clear but the "why" isn't
+- The issue spans multiple components (frontend + backend + IPC)
+- You need to understand existing architecture before deciding how to fix
+- A dev agent already tried to fix it and failed
+- You're considering a design change and need impact analysis
+
+**NEVER investigate yourself.** Your context is precious. Spawn an investigator.
+
 ---
 
 ## Development Cycle (Repeating)
