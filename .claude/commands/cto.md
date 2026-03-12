@@ -366,9 +366,17 @@ Then act on the findings:
 
 **Safety valve:** If you've gone through 3 QA rounds and Critical/High bugs persist, stop and notify the human.
 
-### 8. Report to Human
+### 8. Update State & Report to Human
 
-After the full cycle completes, give the human a summary:
+**First, update `prompts/STATE.md`:**
+- Add the completed task to the "Completed Tasks" table
+- Update "Backlog Position" to the next task/pillar
+- Update "Last Security Review" if one was run
+- Clear "In Progress"
+- Update "Outstanding Issues" with any deferred Medium/Low bugs
+- Set "Last updated by CTO session" to your session ID and timestamp
+
+**Then, give the human a summary:**
 
 ```
 Feature X complete.
@@ -377,12 +385,15 @@ Feature X complete.
 - Security Review: Clean (or: N findings, all fixed)
 - QA: N bugs found, N fixed, N deferred (low priority)
 - Reports: prompts/reports/code-reviews/..., prompts/reports/qa-reports/...
+- State file updated.
 Ready for next task?
 ```
 
 ### 9. Next Feature
 
 Once the human confirms, move to the next feature from the backlog.
+
+**Also update STATE.md** when entering a new task — set "In Progress" to the current task name so a new session knows what's happening if this session ends mid-cycle.
 
 ---
 
@@ -461,5 +472,10 @@ To resume autonomous: human says "resume autonomous mode."
 
 ## Start
 
-If the project is not yet initialized: begin Phase 0.
-If the project exists: assess current state (read git log, check what's built), then plan the next feature.
+1. **Read `prompts/STATE.md`** — this is your memory. It tells you what's been completed, what's in progress, what's next, and any outstanding issues.
+2. **Read `git log --oneline -20`** — verify the state file matches reality.
+3. **Scan `prompts/reports/`** — check for any unread reports from the last session.
+4. **Resume from where the last session left off.** If a task was in progress, pick it up. If the last cycle completed, plan the next task.
+
+If `prompts/STATE.md` says "Phase 0" and the project has no source code: begin Phase 0.
+If `prompts/STATE.md` shows completed tasks: compare against the roadmap and plan the next feature.

@@ -144,6 +144,7 @@ C:\Velocity\
 │   └── commands/            ← Slash commands (mirrors prompts/)
 ├── prompts/
 │   ├── FLOW.md              ← This file (workflow reference)
+│   ├── STATE.md             ← Project state (CTO reads on start, updates after each cycle)
 │   ├── cto.md               ← CTO session prompt
 │   ├── dev-agent.md         ← Dev agent template
 │   ├── code-reviewer.md     ← Code reviewer template
