@@ -5,7 +5,7 @@ vi.mock('@tauri-apps/api/core', () => ({
 }));
 
 import { invoke } from '@tauri-apps/api/core';
-import { createSession, writeToSession, resizeSession, closeSession } from '../lib/pty';
+import { createSession, writeToSession, resizeSession, closeSession, startReading } from '../lib/pty';
 
 const mockedInvoke = vi.mocked(invoke);
 
@@ -57,6 +57,14 @@ describe('IPC Wrapper: pty.ts', () => {
     mockedInvoke.mockResolvedValueOnce(undefined);
     await closeSession('abc-123');
     expect(mockedInvoke).toHaveBeenCalledWith('close_session', {
+      sessionId: 'abc-123',
+    });
+  });
+
+  it('test_startReading_calls_invoke_correctly', async () => {
+    mockedInvoke.mockResolvedValueOnce(undefined);
+    await startReading('abc-123');
+    expect(mockedInvoke).toHaveBeenCalledWith('start_reading', {
       sessionId: 'abc-123',
     });
   });

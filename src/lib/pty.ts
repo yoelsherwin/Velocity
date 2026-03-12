@@ -40,3 +40,9 @@ export async function closeSession(sessionId: string): Promise<void> {
     sessionId,
   });
 }
+
+export async function startReading(sessionId: string): Promise<void> {
+  return invoke<void>('start_reading', {
+    sessionId,
+  });
+}

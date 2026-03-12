@@ -9,7 +9,6 @@ pub struct AppState {
 #[tauri::command]
 pub async fn create_session(
     state: State<'_, AppState>,
-    app_handle: tauri::AppHandle,
     shell_type: Option<String>,
     rows: Option<u16>,
     cols: Option<u16>,
@@ -24,7 +23,25 @@ pub async fn create_session(
             .lock()
             .map_err(|e| format!("Failed to lock session manager: {}", e))?;
 
-        mgr.create_session(shell, r, c, app_handle)
+        mgr.create_session(shell, r, c)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn start_reading(
+    state: State<'_, AppState>,
+    app_handle: tauri::AppHandle,
+    session_id: String,
+) -> Result<(), String> {
+    let manager = state.session_manager.clone();
+    tokio::task::spawn_blocking(move || {
+        let mut mgr = manager
+            .lock()
+            .map_err(|e| format!("Failed to lock session manager: {}", e))?;
+
+        mgr.start_reading(&session_id, app_handle)
     })
     .await
     .map_err(|e| e.to_string())?

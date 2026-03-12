@@ -5,11 +5,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const mockCreateSession = vi.fn();
 const mockWriteToSession = vi.fn();
 const mockCloseSession = vi.fn();
+const mockStartReading = vi.fn();
 
 vi.mock('../lib/pty', () => ({
   createSession: (...args: unknown[]) => mockCreateSession(...args),
   writeToSession: (...args: unknown[]) => mockWriteToSession(...args),
   closeSession: (...args: unknown[]) => mockCloseSession(...args),
+  startReading: (...args: unknown[]) => mockStartReading(...args),
 }));
 
 // Store event listeners so tests can simulate events
@@ -38,6 +40,7 @@ describe('Terminal Component', () => {
     );
     mockWriteToSession.mockResolvedValue(undefined);
     mockCloseSession.mockResolvedValue(undefined);
+    mockStartReading.mockResolvedValue(undefined);
   });
 
   it('test_terminal_renders_without_crashing', async () => {
@@ -330,6 +333,59 @@ describe('Terminal Component', () => {
   it('test_blocks_limited_to_max', () => {
     // Verify the MAX_BLOCKS constant is exported and has the expected value
     expect(MAX_BLOCKS).toBe(50);
+  });
+
+  // --- FIX-008: startReading called after listeners registered ---
+
+  it('test_startReading_called_after_listeners_registered', async () => {
+    render(<Terminal />);
+
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalledWith('powershell', 24, 80);
+    });
+
+    // startReading should be called with the session ID after listeners are set up
+    await waitFor(() => {
+      expect(mockStartReading).toHaveBeenCalledWith('test-session-id');
+    });
+
+    // Verify the call order: createSession -> listen (3x) -> startReading
+    expect(mockCreateSession).toHaveBeenCalledTimes(1);
+    expect(mockListen).toHaveBeenCalledTimes(3);
+    expect(mockStartReading).toHaveBeenCalledTimes(1);
+
+    // startReading must be called AFTER all listen calls
+    const listenOrder = mockListen.mock.invocationCallOrder;
+    const startReadingOrder = mockStartReading.mock.invocationCallOrder;
+    const lastListenCall = Math.max(...listenOrder);
+    const firstStartReadingCall = Math.min(...startReadingOrder);
+    expect(firstStartReadingCall).toBeGreaterThan(lastListenCall);
+  });
+
+  it('test_startReading_called_on_shell_switch', async () => {
+    mockCreateSession
+      .mockResolvedValueOnce('session-1')
+      .mockResolvedValueOnce('session-2');
+
+    render(<Terminal />);
+
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalledWith('powershell', 24, 80);
+    });
+
+    await waitFor(() => {
+      expect(mockStartReading).toHaveBeenCalledWith('session-1');
+    });
+
+    // Switch to CMD
+    const cmdBtn = screen.getByTestId('shell-btn-cmd');
+    await act(async () => {
+      fireEvent.click(cmdBtn);
+    });
+
+    await waitFor(() => {
+      expect(mockStartReading).toHaveBeenCalledWith('session-2');
+    });
   });
 
   // --- FIX-007: StrictMode double-mount cancellation test ---

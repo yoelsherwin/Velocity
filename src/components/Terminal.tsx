@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { listen } from '@tauri-apps/api/event';
-import { createSession, writeToSession, closeSession } from '../lib/pty';
+import { createSession, writeToSession, closeSession, startReading } from '../lib/pty';
 import { SHELL_TYPES, ShellType, Block } from '../lib/types';
 import BlockView from './blocks/BlockView';
 
@@ -136,6 +136,17 @@ function Terminal() {
         }
 
         unlistenRefs.current = [unlistenOutput, unlistenError, unlistenClosed];
+
+        // Start the reader thread NOW — all listeners are guaranteed to be
+        // registered, so no output will be lost to the emit/listen race.
+        await startReading(sid);
+
+        // Check staleness one more time after the async startReading call
+        if (startSessionIdRef.current !== thisInvocation) {
+          cleanupListeners();
+          closeSession(sid).catch(() => {});
+          return;
+        }
       } catch (err) {
         // Bail if this invocation was superseded
         if (startSessionIdRef.current !== thisInvocation) return;
