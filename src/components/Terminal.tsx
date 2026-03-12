@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { createSession, writeToSession, closeSession } from '../lib/pty';
+import AnsiOutput from './AnsiOutput';
 
 const OUTPUT_BUFFER_LIMIT = 100_000;
 
@@ -87,7 +88,7 @@ function Terminal() {
         className="terminal-output"
         data-testid="terminal-output"
       >
-        {output}
+        <AnsiOutput text={output} />
         {closed && '\n[Process exited]'}
       </pre>
       <div className="terminal-input-row">

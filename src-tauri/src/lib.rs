@@ -1,3 +1,4 @@
+mod ansi;
 mod commands;
 mod pty;
 
@@ -8,7 +9,6 @@ use std::sync::{Arc, Mutex};
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_opener::init())
         .manage(AppState {
             session_manager: Arc::new(Mutex::new(SessionManager::new())),
         })

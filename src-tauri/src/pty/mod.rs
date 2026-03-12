@@ -1,3 +1,4 @@
+use crate::ansi::AnsiFilter;
 use portable_pty::{CommandBuilder, MasterPty, PtySize, Child, native_pty_system};
 use std::collections::HashMap;
 use std::io::{Read, Write};
@@ -6,6 +7,8 @@ use std::sync::Arc;
 use tauri::AppHandle;
 use tauri::Emitter;
 use uuid::Uuid;
+
+pub const MAX_SESSIONS: usize = 20;
 
 pub fn validate_shell_type(shell_type: &str) -> Result<(), String> {
     match shell_type {
@@ -42,6 +45,10 @@ impl SessionManager {
         self.sessions.keys().cloned().collect()
     }
 
+    pub fn session_count(&self) -> usize {
+        self.sessions.len()
+    }
+
     pub fn create_session(
         &mut self,
         shell_type: &str,
@@ -49,6 +56,10 @@ impl SessionManager {
         cols: u16,
         app_handle: AppHandle,
     ) -> Result<String, String> {
+        if self.sessions.len() >= MAX_SESSIONS {
+            return Err(format!("Maximum session limit ({}) reached", MAX_SESSIONS));
+        }
+
         validate_shell_type(shell_type)?;
 
         let pty_system = native_pty_system();
@@ -96,6 +107,7 @@ impl SessionManager {
 
         std::thread::spawn(move || {
             let mut buf = [0u8; 4096];
+            let mut ansi_filter = AnsiFilter::new();
             loop {
                 if shutdown_flag.load(Ordering::Relaxed) {
                     break;
@@ -103,7 +115,7 @@ impl SessionManager {
                 match reader.read(&mut buf) {
                     Ok(0) => break,
                     Ok(n) => {
-                        let output = String::from_utf8_lossy(&buf[..n]).to_string();
+                        let output = ansi_filter.filter(&buf[..n]);
                         let _ = app_handle.emit(
                             &format!("pty:output:{}", sid),
                             output,
