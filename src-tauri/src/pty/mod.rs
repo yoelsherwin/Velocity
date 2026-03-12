@@ -10,6 +10,16 @@ use uuid::Uuid;
 
 pub const MAX_SESSIONS: usize = 20;
 
+pub fn validate_dimensions(rows: u16, cols: u16) -> Result<(), String> {
+    if rows < 1 || rows > 500 {
+        return Err(format!("Invalid rows: {}. Must be between 1 and 500.", rows));
+    }
+    if cols < 1 || cols > 500 {
+        return Err(format!("Invalid cols: {}. Must be between 1 and 500.", cols));
+    }
+    Ok(())
+}
+
 pub fn validate_shell_type(shell_type: &str) -> Result<(), String> {
     match shell_type {
         "powershell" | "cmd" | "wsl" => Ok(()),
@@ -57,6 +67,8 @@ impl SessionManager {
         cols: u16,
         app_handle: AppHandle,
     ) -> Result<String, String> {
+        validate_dimensions(rows, cols)?;
+
         if self.sessions.len() >= MAX_SESSIONS {
             return Err(format!("Maximum session limit ({}) reached", MAX_SESSIONS));
         }
@@ -167,6 +179,8 @@ impl SessionManager {
     }
 
     pub fn resize_session(&mut self, session_id: &str, rows: u16, cols: u16) -> Result<(), String> {
+        validate_dimensions(rows, cols)?;
+
         let session = self
             .sessions
             .get(session_id)
@@ -308,5 +322,40 @@ mod tests {
         // This test must be run manually with `cargo test -- --ignored`
         // in an environment where PowerShell is available
         todo!("Integration test: requires Tauri AppHandle for event emission")
+    }
+
+    #[test]
+    fn test_validate_dimensions_valid() {
+        assert!(validate_dimensions(24, 80).is_ok());
+        assert!(validate_dimensions(1, 1).is_ok());
+        assert!(validate_dimensions(500, 500).is_ok());
+    }
+
+    #[test]
+    fn test_validate_dimensions_zero_rows() {
+        let result = validate_dimensions(0, 80);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid rows"));
+    }
+
+    #[test]
+    fn test_validate_dimensions_zero_cols() {
+        let result = validate_dimensions(24, 0);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid cols"));
+    }
+
+    #[test]
+    fn test_validate_dimensions_overflow_rows() {
+        let result = validate_dimensions(501, 80);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid rows"));
+    }
+
+    #[test]
+    fn test_validate_dimensions_overflow_cols() {
+        let result = validate_dimensions(24, 501);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid cols"));
     }
 }

@@ -76,3 +76,59 @@ html, body, #root {
 .terminal-input:disabled {
   opacity: 0.5;
 }
+
+.shell-selector {
+  display: flex;
+  gap: 4px;
+  padding: 4px 8px;
+  border-bottom: 1px solid #313244;
+  background-color: #1e1e2e;
+}
+
+.shell-btn {
+  padding: 2px 12px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background-color: transparent;
+  color: #a6adc8;
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.shell-btn:hover {
+  background-color: #313244;
+  color: #cdd6f4;
+}
+
+.shell-btn-active {
+  background-color: #313244;
+  color: #cdd6f4;
+  border-bottom: 2px solid #89b4fa;
+}
+
+.terminal-restart-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  border-top: 1px solid #313244;
+  background-color: #1e1e2e;
+}
+
+.restart-btn {
+  padding: 4px 16px;
+  border: 1px solid #89b4fa;
+  border-radius: 4px;
+  background-color: transparent;
+  color: #89b4fa;
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.restart-btn:hover {
+  background-color: #313244;
+}

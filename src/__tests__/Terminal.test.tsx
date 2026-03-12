@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mockCreateSession = vi.fn();
@@ -11,6 +11,9 @@ vi.mock('../lib/pty', () => ({
   closeSession: (...args: unknown[]) => mockCloseSession(...args),
 }));
 
+// Store event listeners so tests can simulate events
+type ListenerCallback = (event: { payload: unknown }) => void;
+const eventListeners: Record<string, ListenerCallback> = {};
 const mockListen = vi.fn();
 
 vi.mock('@tauri-apps/api/event', () => ({
@@ -22,8 +25,16 @@ import Terminal from '../components/Terminal';
 describe('Terminal Component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Clear stored listeners
+    Object.keys(eventListeners).forEach((key) => delete eventListeners[key]);
+
     mockCreateSession.mockResolvedValue('test-session-id');
-    mockListen.mockResolvedValue(vi.fn()); // unlisten function
+    mockListen.mockImplementation(
+      async (eventName: string, callback: ListenerCallback) => {
+        eventListeners[eventName] = callback;
+        return vi.fn(); // unlisten function
+      },
+    );
     mockWriteToSession.mockResolvedValue(undefined);
     mockCloseSession.mockResolvedValue(undefined);
   });
@@ -109,6 +120,171 @@ describe('Terminal Component', () => {
     await waitFor(() => {
       const output = screen.getByTestId('terminal-output');
       expect(output.textContent).toContain('[Write error:');
+    });
+  });
+
+  // --- Task 004: Shell selector tests ---
+
+  it('test_shell_selector_renders', async () => {
+    render(<Terminal />);
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+    expect(screen.getByTestId('shell-btn-powershell')).toBeInTheDocument();
+    expect(screen.getByTestId('shell-btn-cmd')).toBeInTheDocument();
+    expect(screen.getByTestId('shell-btn-wsl')).toBeInTheDocument();
+  });
+
+  it('test_powershell_selected_by_default', async () => {
+    render(<Terminal />);
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+    const psBtn = screen.getByTestId('shell-btn-powershell');
+    expect(psBtn).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('test_creates_session_with_default_shell', async () => {
+    render(<Terminal />);
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalledWith('powershell', 24, 80);
+    });
+  });
+
+  it('test_shell_switch_creates_new_session', async () => {
+    mockCreateSession
+      .mockResolvedValueOnce('session-1')
+      .mockResolvedValueOnce('session-2');
+
+    render(<Terminal />);
+
+    // Wait for initial session to be created
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalledWith('powershell', 24, 80);
+    });
+
+    // Click CMD button to switch shell
+    const cmdBtn = screen.getByTestId('shell-btn-cmd');
+    await act(async () => {
+      fireEvent.click(cmdBtn);
+    });
+
+    await waitFor(() => {
+      expect(mockCloseSession).toHaveBeenCalledWith('session-1');
+    });
+
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalledWith('cmd', 24, 80);
+    });
+  });
+
+  // --- Task 004: Restart tests ---
+
+  it('test_restart_button_appears_on_exit', async () => {
+    render(<Terminal />);
+
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    // Simulate pty:closed event
+    await act(async () => {
+      const closedCallback = eventListeners['pty:closed:test-session-id'];
+      if (closedCallback) {
+        closedCallback({ payload: undefined });
+      }
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('restart-button')).toBeInTheDocument();
+    });
+  });
+
+  it('test_restart_creates_new_session', async () => {
+    mockCreateSession
+      .mockResolvedValueOnce('session-1')
+      .mockResolvedValueOnce('session-2');
+
+    render(<Terminal />);
+
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalledWith('powershell', 24, 80);
+    });
+
+    // Simulate pty:closed event
+    await act(async () => {
+      const closedCallback = eventListeners['pty:closed:session-1'];
+      if (closedCallback) {
+        closedCallback({ payload: undefined });
+      }
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('restart-button')).toBeInTheDocument();
+    });
+
+    // Click restart
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('restart-button'));
+    });
+
+    await waitFor(() => {
+      // Should create a new session with the same shell type
+      expect(mockCreateSession).toHaveBeenCalledTimes(2);
+      expect(mockCreateSession).toHaveBeenLastCalledWith('powershell', 24, 80);
+    });
+  });
+
+  it('test_output_clears_on_restart', async () => {
+    mockCreateSession
+      .mockResolvedValueOnce('session-1')
+      .mockResolvedValueOnce('session-2');
+
+    render(<Terminal />);
+
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    // Simulate some output
+    await act(async () => {
+      const outputCallback = eventListeners['pty:output:session-1'];
+      if (outputCallback) {
+        outputCallback({ payload: 'some output text' });
+      }
+    });
+
+    // Verify the output is displayed
+    await waitFor(() => {
+      const output = screen.getByTestId('terminal-output');
+      expect(output.textContent).toContain('some output text');
+    });
+
+    // Simulate pty:closed event
+    await act(async () => {
+      const closedCallback = eventListeners['pty:closed:session-1'];
+      if (closedCallback) {
+        closedCallback({ payload: undefined });
+      }
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('restart-button')).toBeInTheDocument();
+    });
+
+    // Click restart
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('restart-button'));
+    });
+
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalledTimes(2);
+    });
+
+    // Output should be cleared after restart
+    await waitFor(() => {
+      const output = screen.getByTestId('terminal-output');
+      expect(output.textContent).not.toContain('some output text');
     });
   });
 });
