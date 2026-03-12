@@ -11,6 +11,16 @@ export interface AnsiSpan {
 }
 
 /**
+ * Strip SGR (Select Graphic Rendition) ANSI escape sequences from text.
+ * Only strips SGR sequences — the only kind our Rust filter allows through.
+ * Used for clean clipboard copying.
+ */
+export function stripAnsi(text: string): string {
+  // eslint-disable-next-line no-control-regex
+  return text.replace(/\x1b\[[0-9;]*m/g, '');
+}
+
+/**
  * Parse ANSI-escaped text into styled spans.
  * Input should already be security-filtered by the Rust backend
  * (only SGR sequences remain).

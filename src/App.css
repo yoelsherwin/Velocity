@@ -132,3 +132,98 @@ html, body, #root {
 .restart-btn:hover {
   background-color: #313244;
 }
+
+/* --- Block Model Styles --- */
+
+.block-container {
+  border-bottom: 1px solid #313244;
+  padding: 4px 0;
+  position: relative;
+}
+
+.block-container.block-active {
+  border-left: 2px solid #89b4fa;
+  padding-left: 6px;
+}
+
+.block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 4px;
+  border-bottom: 1px solid #282838;
+  margin-bottom: 2px;
+}
+
+.block-command-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.block-command {
+  font-family: 'Cascadia Code', 'Consolas', 'Courier New', monospace;
+  color: #f5f5f5;
+  font-size: 14px;
+}
+
+.block-timestamp {
+  color: #6c7086;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.block-output {
+  padding: 2px 4px;
+  margin: 0;
+  color: #cdd6f4;
+  background-color: #1e1e2e;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-family: 'Cascadia Code', 'Consolas', 'Courier New', monospace;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.block-actions {
+  display: none;
+  gap: 4px;
+  padding: 2px 4px;
+}
+
+.block-container:hover .block-actions {
+  display: flex;
+}
+
+.block-action-btn {
+  padding: 1px 8px;
+  border: 1px solid #45475a;
+  border-radius: 3px;
+  background-color: transparent;
+  color: #a6adc8;
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.block-action-btn:hover {
+  background-color: #313244;
+  color: #cdd6f4;
+}
+
+.block-running-indicator {
+  color: #89b4fa;
+  font-size: 10px;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.block-process-exited {
+  padding: 4px;
+  color: #a6adc8;
+}

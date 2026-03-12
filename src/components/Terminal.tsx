@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { createSession, writeToSession, closeSession } from '../lib/pty';
-import { SHELL_TYPES, ShellType } from '../lib/types';
-import AnsiOutput from './AnsiOutput';
+import { SHELL_TYPES, ShellType, Block } from '../lib/types';
+import BlockView from './blocks/BlockView';
 
-const OUTPUT_BUFFER_LIMIT = 100_000;
+export const MAX_BLOCKS = 50;
 
 const SHELL_LABELS: Record<ShellType, string> = {
   powershell: 'PowerShell',
@@ -12,14 +12,26 @@ const SHELL_LABELS: Record<ShellType, string> = {
   wsl: 'WSL',
 };
 
+function createBlock(command: string, shellType: ShellType): Block {
+  return {
+    id: crypto.randomUUID(),
+    command,
+    output: '',
+    timestamp: Date.now(),
+    status: 'running',
+    shellType,
+  };
+}
+
 function Terminal() {
   const sessionIdRef = useRef<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [shellType, setShellType] = useState<ShellType>('powershell');
-  const [output, setOutput] = useState('');
+  const [blocks, setBlocks] = useState<Block[]>([]);
+  const activeBlockIdRef = useRef<string | null>(null);
   const [input, setInput] = useState('');
   const [closed, setClosed] = useState(false);
-  const outputRef = useRef<HTMLPreElement>(null);
+  const outputRef = useRef<HTMLDivElement>(null);
   const unlistenRefs = useRef<(() => void)[]>([]);
 
   const updateSessionId = useCallback((id: string | null) => {
@@ -41,23 +53,34 @@ function Terminal() {
         updateSessionId(sid);
         setClosed(false);
 
+        // Create initial welcome block
+        const welcomeBlock = createBlock('', shell);
+        activeBlockIdRef.current = welcomeBlock.id;
+        setBlocks([welcomeBlock]);
+
         const unlistenOutput = await listen<string>(
           `pty:output:${sid}`,
           (event) => {
-            setOutput((prev) => {
-              const next = prev + event.payload;
-              if (next.length > OUTPUT_BUFFER_LIMIT) {
-                return next.slice(next.length - OUTPUT_BUFFER_LIMIT);
-              }
-              return next;
-            });
+            setBlocks((prev) =>
+              prev.map((b) =>
+                b.id === activeBlockIdRef.current
+                  ? { ...b, output: b.output + event.payload }
+                  : b,
+              ),
+            );
           },
         );
 
         const unlistenError = await listen<string>(
           `pty:error:${sid}`,
           (event) => {
-            setOutput((prev) => prev + `\n[Error: ${event.payload}]\n`);
+            setBlocks((prev) =>
+              prev.map((b) =>
+                b.id === activeBlockIdRef.current
+                  ? { ...b, output: b.output + `\n[Error: ${event.payload}]\n` }
+                  : b,
+              ),
+            );
           },
         );
 
@@ -70,7 +93,11 @@ function Terminal() {
 
         unlistenRefs.current = [unlistenOutput, unlistenError, unlistenClosed];
       } catch (err) {
-        setOutput(`[Failed to create session: ${err}]`);
+        const errorBlock = createBlock('', shell);
+        errorBlock.output = `[Failed to create session: ${err}]`;
+        errorBlock.status = 'completed';
+        activeBlockIdRef.current = errorBlock.id;
+        setBlocks([errorBlock]);
       }
     },
     [updateSessionId],
@@ -82,7 +109,8 @@ function Terminal() {
         await closeSession(sessionIdRef.current).catch(() => {});
       }
       cleanupListeners();
-      setOutput('');
+      setBlocks([]);
+      activeBlockIdRef.current = null;
       setInput('');
       setClosed(false);
       updateSessionId(null);
@@ -113,11 +141,12 @@ function Terminal() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Auto-scroll to bottom when blocks update
   useEffect(() => {
     if (outputRef.current) {
       outputRef.current.scrollTop = outputRef.current.scrollHeight;
     }
-  }, [output]);
+  }, [blocks]);
 
   const handleShellSwitch = useCallback(
     async (newShell: ShellType) => {
@@ -132,16 +161,69 @@ function Terminal() {
     await resetAndStart(shellType);
   }, [shellType, resetAndStart]);
 
+  const handleRerun = useCallback(
+    (command: string) => {
+      if (!sessionId || closed) return;
+      const newBlock = createBlock(command, shellType);
+      // Finalize current active block, add new block, enforce limit
+      setBlocks((prev) => {
+        const updated = prev.map((b) =>
+          b.id === activeBlockIdRef.current
+            ? { ...b, status: 'completed' as const }
+            : b,
+        );
+        const withNew = [...updated, newBlock];
+        return withNew.length > MAX_BLOCKS
+          ? withNew.slice(-MAX_BLOCKS)
+          : withNew;
+      });
+      activeBlockIdRef.current = newBlock.id;
+      writeToSession(sessionId, command + '\r').catch((err) => {
+        setBlocks((prev) =>
+          prev.map((b) =>
+            b.id === newBlock.id
+              ? { ...b, output: b.output + `\n[Write error: ${err}]\n` }
+              : b,
+          ),
+        );
+      });
+    },
+    [sessionId, closed, shellType],
+  );
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
       if (e.key === 'Enter' && sessionId && !closed) {
-        writeToSession(sessionId, input + '\r').catch((err) => {
-          setOutput((prev) => prev + `\n[Write error: ${err}]\n`);
+        const command = input;
+        const newBlock = createBlock(command, shellType);
+
+        // Finalize current active block, add new block, enforce limit
+        setBlocks((prev) => {
+          const updated = prev.map((b) =>
+            b.id === activeBlockIdRef.current
+              ? { ...b, status: 'completed' as const }
+              : b,
+          );
+          const withNew = [...updated, newBlock];
+          return withNew.length > MAX_BLOCKS
+            ? withNew.slice(-MAX_BLOCKS)
+            : withNew;
+        });
+        activeBlockIdRef.current = newBlock.id;
+
+        writeToSession(sessionId, command + '\r').catch((err) => {
+          setBlocks((prev) =>
+            prev.map((b) =>
+              b.id === newBlock.id
+                ? { ...b, output: b.output + `\n[Write error: ${err}]\n` }
+                : b,
+            ),
+          );
         });
         setInput('');
       }
     },
-    [sessionId, input, closed],
+    [sessionId, input, closed, shellType],
   );
 
   return (
@@ -160,14 +242,21 @@ function Terminal() {
           </button>
         ))}
       </div>
-      <pre
+      <div
         ref={outputRef}
         className="terminal-output"
         data-testid="terminal-output"
       >
-        <AnsiOutput text={output} />
-        {closed && '\n[Process exited]'}
-      </pre>
+        {blocks.map((block) => (
+          <BlockView
+            key={block.id}
+            block={block}
+            isActive={block.id === activeBlockIdRef.current}
+            onRerun={handleRerun}
+          />
+        ))}
+        {closed && <div className="block-process-exited">[Process exited]</div>}
+      </div>
       {closed ? (
         <div className="terminal-restart-row">
           <button
