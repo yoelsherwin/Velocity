@@ -112,10 +112,21 @@ impl SessionManager {
             .try_clone_reader()
             .map_err(|e| format!("Failed to clone PTY reader: {}", e))?;
 
-        let writer = pair
+        let mut writer = pair
             .master
             .take_writer()
             .map_err(|e| format!("Failed to get PTY writer: {}", e))?;
+
+        // Respond to ConPTY's cursor position query (DSR \x1b[6n).
+        // portable-pty creates ConPTY with PSEUDOCONSOLE_INHERIT_CURSOR flag,
+        // which causes ConPTY to query cursor position and block until response.
+        // We preemptively respond with cursor at (1,1) to unblock output.
+        writer
+            .write_all(b"\x1b[1;1R")
+            .map_err(|e| format!("Failed to send cursor position response: {}", e))?;
+        writer
+            .flush()
+            .map_err(|e| format!("Failed to flush cursor response: {}", e))?;
 
         let session_id = Uuid::new_v4().to_string();
         let shutdown = Arc::new(AtomicBool::new(false));
@@ -175,7 +186,7 @@ impl SessionManager {
                 match reader.read(&mut buf) {
                     Ok(0) => break,
                     Ok(n) => {
-                        eprintln!("[pty:{}] raw read: {} bytes", sid, n);
+                        eprintln!("[pty:{}] raw read: {} bytes, hex: {:02x?}", sid, n, &buf[..n.min(64)]);
                         let output = ansi_filter.filter(&buf[..n]);
                         eprintln!(
                             "[pty:{}] filtered: {} bytes, empty={}",
