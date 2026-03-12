@@ -13,6 +13,7 @@ const SHELL_LABELS: Record<ShellType, string> = {
 };
 
 function Terminal() {
+  const sessionIdRef = useRef<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [shellType, setShellType] = useState<ShellType>('powershell');
   const [output, setOutput] = useState('');
@@ -20,6 +21,11 @@ function Terminal() {
   const [closed, setClosed] = useState(false);
   const outputRef = useRef<HTMLPreElement>(null);
   const unlistenRefs = useRef<(() => void)[]>([]);
+
+  const updateSessionId = useCallback((id: string | null) => {
+    sessionIdRef.current = id;
+    setSessionId(id);
+  }, []);
 
   const cleanupListeners = useCallback(() => {
     for (const unlisten of unlistenRefs.current) {
@@ -32,7 +38,7 @@ function Terminal() {
     async (shell: ShellType) => {
       try {
         const sid = await createSession(shell, 24, 80);
-        setSessionId(sid);
+        updateSessionId(sid);
         setClosed(false);
 
         const unlistenOutput = await listen<string>(
@@ -67,7 +73,22 @@ function Terminal() {
         setOutput(`[Failed to create session: ${err}]`);
       }
     },
-    [],
+    [updateSessionId],
+  );
+
+  const resetAndStart = useCallback(
+    async (shell: ShellType) => {
+      if (sessionIdRef.current) {
+        await closeSession(sessionIdRef.current).catch(() => {});
+      }
+      cleanupListeners();
+      setOutput('');
+      setInput('');
+      setClosed(false);
+      updateSessionId(null);
+      await startSession(shell);
+    },
+    [cleanupListeners, startSession, updateSessionId],
   );
 
   // Initialize session on mount
@@ -84,13 +105,10 @@ function Terminal() {
     return () => {
       mounted = false;
       cleanupListeners();
-      // Close session on unmount — best-effort
-      setSessionId((currentSid) => {
-        if (currentSid) {
-          closeSession(currentSid).catch(() => {});
-        }
-        return null;
-      });
+      // Close session on unmount — best-effort, using ref for current value
+      if (sessionIdRef.current) {
+        closeSession(sessionIdRef.current).catch(() => {});
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -104,38 +122,15 @@ function Terminal() {
   const handleShellSwitch = useCallback(
     async (newShell: ShellType) => {
       if (newShell === shellType && !closed) return;
-
-      // Clean up old session
-      cleanupListeners();
-      if (sessionId) {
-        await closeSession(sessionId).catch(() => {});
-      }
-
       setShellType(newShell);
-      setOutput('');
-      setInput('');
-      setClosed(false);
-      setSessionId(null);
-
-      await startSession(newShell);
+      await resetAndStart(newShell);
     },
-    [shellType, closed, sessionId, cleanupListeners, startSession],
+    [shellType, closed, resetAndStart],
   );
 
   const handleRestart = useCallback(async () => {
-    // Clean up old session
-    cleanupListeners();
-    if (sessionId) {
-      await closeSession(sessionId).catch(() => {});
-    }
-
-    setOutput('');
-    setInput('');
-    setClosed(false);
-    setSessionId(null);
-
-    await startSession(shellType);
-  }, [sessionId, shellType, cleanupListeners, startSession]);
+    await resetAndStart(shellType);
+  }, [shellType, resetAndStart]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -151,10 +146,11 @@ function Terminal() {
 
   return (
     <div className="terminal-container">
-      <div className="shell-selector" data-testid="shell-selector">
+      <div className="shell-selector" role="tablist" data-testid="shell-selector">
         {SHELL_TYPES.map((shell) => (
           <button
             key={shell}
+            role="tab"
             className={`shell-btn ${shell === shellType ? 'shell-btn-active' : ''}`}
             data-testid={`shell-btn-${shell}`}
             aria-selected={shell === shellType}

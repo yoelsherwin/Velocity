@@ -1,7 +1,8 @@
 import { invoke } from '@tauri-apps/api/core';
+import { ShellType } from './types';
 
 export async function createSession(
-  shellType?: string,
+  shellType?: ShellType,
   rows?: number,
   cols?: number,
 ): Promise<string> {
