@@ -3,6 +3,7 @@ import { listen } from '@tauri-apps/api/event';
 import { createSession, writeToSession, closeSession, startReading } from '../lib/pty';
 import { SHELL_TYPES, ShellType, Block } from '../lib/types';
 import BlockView from './blocks/BlockView';
+import InputEditor from './editor/InputEditor';
 
 export const MAX_BLOCKS = 50;
 
@@ -253,16 +254,6 @@ function Terminal() {
     [submitCommand],
   );
 
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === 'Enter' && sessionIdRef.current && !closed) {
-        submitCommand(input);
-        setInput('');
-      }
-    },
-    [submitCommand, input, closed],
-  );
-
   return (
     <div className="terminal-container">
       <div className="shell-selector" role="tablist" data-testid="shell-selector">
@@ -305,17 +296,13 @@ function Terminal() {
           </button>
         </div>
       ) : (
-        <div className="terminal-input-row">
-          <span className="terminal-prompt">&gt;</span>
-          <input
-            className="terminal-input"
-            data-testid="terminal-input"
-            type="text"
+        <div data-testid="terminal-input">
+          <InputEditor
             value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
+            onChange={setInput}
+            onSubmit={(cmd) => { submitCommand(cmd); setInput(''); }}
             disabled={closed}
-            autoFocus
+            shellType={shellType}
           />
         </div>
       )}

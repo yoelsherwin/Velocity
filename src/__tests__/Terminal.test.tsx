@@ -80,9 +80,9 @@ describe('Terminal Component', () => {
       expect(mockCreateSession).toHaveBeenCalled();
     });
 
-    const input = screen.getByTestId('terminal-input');
-    fireEvent.change(input, { target: { value: 'echo hello' } });
-    fireEvent.keyDown(input, { key: 'Enter' });
+    const textarea = screen.getByTestId('editor-textarea');
+    fireEvent.change(textarea, { target: { value: 'echo hello' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
 
     await waitFor(() => {
       expect(mockWriteToSession).toHaveBeenCalledWith(
@@ -99,12 +99,12 @@ describe('Terminal Component', () => {
       expect(mockCreateSession).toHaveBeenCalled();
     });
 
-    const input = screen.getByTestId('terminal-input') as HTMLInputElement;
-    fireEvent.change(input, { target: { value: 'echo hello' } });
-    fireEvent.keyDown(input, { key: 'Enter' });
+    const textarea = screen.getByTestId('editor-textarea') as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: 'echo hello' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
 
     await waitFor(() => {
-      expect(input.value).toBe('');
+      expect(textarea.value).toBe('');
     });
   });
 
@@ -117,9 +117,9 @@ describe('Terminal Component', () => {
       expect(mockCreateSession).toHaveBeenCalled();
     });
 
-    const input = screen.getByTestId('terminal-input');
-    fireEvent.change(input, { target: { value: 'bad command' } });
-    fireEvent.keyDown(input, { key: 'Enter' });
+    const textarea = screen.getByTestId('editor-textarea');
+    fireEvent.change(textarea, { target: { value: 'bad command' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
 
     await waitFor(() => {
       const output = screen.getByTestId('terminal-output');
@@ -312,9 +312,9 @@ describe('Terminal Component', () => {
       expect(mockCreateSession).toHaveBeenCalled();
     });
 
-    const input = screen.getByTestId('terminal-input');
-    fireEvent.change(input, { target: { value: 'echo hello' } });
-    fireEvent.keyDown(input, { key: 'Enter' });
+    const textarea = screen.getByTestId('editor-textarea');
+    fireEvent.change(textarea, { target: { value: 'echo hello' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
 
     await waitFor(() => {
       // The command text should appear somewhere in the output area

@@ -227,3 +227,66 @@ html, body, #root {
   padding: 4px;
   color: #a6adc8;
 }
+
+/* --- Input Editor Styles --- */
+
+.input-editor {
+  display: flex;
+  padding: 4px 8px;
+  border-top: 1px solid #313244;
+  background-color: #1e1e2e;
+}
+
+.editor-prompt {
+  color: #89b4fa;
+  margin-right: 8px;
+  user-select: none;
+  padding-top: 2px;
+}
+
+.editor-area {
+  flex: 1;
+  position: relative;
+}
+
+.editor-textarea,
+.editor-highlight {
+  font-family: 'Cascadia Code', 'Consolas', 'Courier New', monospace;
+  font-size: 14px;
+  line-height: 1.4;
+  padding: 0;
+  margin: 0;
+  border: none;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow: hidden;
+}
+
+.editor-textarea {
+  position: relative;
+  width: 100%;
+  resize: none;
+  background: transparent;
+  color: transparent;
+  caret-color: #cdd6f4;
+  outline: none;
+  z-index: 1;
+}
+
+.editor-highlight {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+  color: #cdd6f4;
+  z-index: 0;
+}
+
+/* Token colors — Catppuccin Mocha */
+.token-command { color: #89b4fa; }
+.token-flag { color: #f9e2af; }
+.token-string { color: #a6e3a1; }
+.token-pipe { color: #f38ba8; }
+.token-argument { color: #cdd6f4; }
+.token-whitespace { /* inherits */ }

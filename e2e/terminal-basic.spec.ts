@@ -10,9 +10,9 @@ test.describe('Terminal — core functionality', () => {
       appPage.getByTestId('shell-btn-powershell'),
     ).toHaveAttribute('aria-selected', 'true');
 
-    // Input field should be visible and enabled
+    // Input editor should be visible and textarea enabled
     await expect(appPage.getByTestId('terminal-input')).toBeVisible();
-    await expect(appPage.getByTestId('terminal-input')).toBeEnabled();
+    await expect(appPage.getByTestId('editor-textarea')).toBeEnabled();
   });
 
   test('PowerShell prompt appears in welcome block', async ({ appPage }) => {
@@ -24,11 +24,11 @@ test.describe('Terminal — core functionality', () => {
   });
 
   test('type command and see output in block', async ({ appPage }) => {
-    const input = appPage.getByTestId('terminal-input');
+    const textarea = appPage.getByTestId('editor-textarea');
 
     // Use a unique marker string to identify our output
-    await input.fill('echo hello-e2e-test');
-    await input.press('Enter');
+    await textarea.fill('echo hello-e2e-test');
+    await textarea.press('Enter');
 
     // Wait for the marker text to appear in the output area
     const output = appPage.getByTestId('terminal-output');
@@ -36,19 +36,19 @@ test.describe('Terminal — core functionality', () => {
   });
 
   test('multiple commands create multiple blocks', async ({ appPage }) => {
-    const input = appPage.getByTestId('terminal-input');
+    const textarea = appPage.getByTestId('editor-textarea');
     const output = appPage.getByTestId('terminal-output');
 
     // Run first command with unique marker
-    await input.fill('echo first-cmd-marker');
-    await input.press('Enter');
+    await textarea.fill('echo first-cmd-marker');
+    await textarea.press('Enter');
     await expect(output).toContainText('first-cmd-marker', {
       timeout: 10_000,
     });
 
     // Run second command with different unique marker
-    await input.fill('echo second-cmd-marker');
-    await input.press('Enter');
+    await textarea.fill('echo second-cmd-marker');
+    await textarea.press('Enter');
     await expect(output).toContainText('second-cmd-marker', {
       timeout: 10_000,
     });

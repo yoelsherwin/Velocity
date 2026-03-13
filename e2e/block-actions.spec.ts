@@ -2,7 +2,7 @@ import { test, expect } from './fixtures';
 
 test.describe('Block actions', () => {
   test('block shows command text in header', async ({ appPage }) => {
-    const input = appPage.getByTestId('terminal-input');
+    const input = appPage.getByTestId('editor-textarea');
 
     // Run a command with a unique marker
     await input.fill('echo block-header-test');

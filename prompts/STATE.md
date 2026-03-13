@@ -27,7 +27,7 @@ Next task number: 008
 | FIX-009 | ConPTY cursor position response | `1acbb98` | — | — | — |
 
 ## In Progress
-None.
+TASK-008: Decoupled Input Editor — Multi-line + Syntax Highlighting
 
 ## Outstanding Issues
 - **BUG-025 (Medium)**: No per-block output size limit.

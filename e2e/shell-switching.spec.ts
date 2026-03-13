@@ -16,7 +16,7 @@ test.describe('Shell switching', () => {
     await expect(output).toContainText('>', { timeout: 15_000 });
 
     // Verify that CMD can actually execute a command and produce output
-    const input = appPage.getByTestId('terminal-input');
+    const input = appPage.getByTestId('editor-textarea');
     await input.fill('echo cmd-e2e-test');
     await input.press('Enter');
     await expect(output).toContainText('cmd-e2e-test', { timeout: 10_000 });
@@ -41,7 +41,7 @@ test.describe('Shell switching', () => {
     ).toHaveAttribute('aria-selected', 'true');
 
     // Should be able to run a PowerShell command successfully
-    const input = appPage.getByTestId('terminal-input');
+    const input = appPage.getByTestId('editor-textarea');
     await input.fill('echo ps-after-switch');
     await input.press('Enter');
     await expect(output).toContainText('ps-after-switch', {
@@ -79,7 +79,7 @@ test.describe('Shell switching', () => {
       return;
     }
 
-    const input = appPage.getByTestId('terminal-input');
+    const input = appPage.getByTestId('editor-textarea');
     await input.fill('echo wsl-e2e-test');
     await input.press('Enter');
     await expect(output).toContainText('wsl-e2e-test', { timeout: 10_000 });
