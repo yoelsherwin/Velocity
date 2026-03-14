@@ -189,4 +189,101 @@ describe('TabManager', () => {
     // The remaining tab should be active
     expect(tabButtons[0]).toHaveClass('tab-button-active');
   });
+
+  it('test_close_tab_calls_closeSession', async () => {
+    let sessionCounter = 0;
+    mockCreateSession.mockImplementation(async () => `session-${++sessionCounter}`);
+
+    render(<TabManager />);
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalledTimes(1);
+    });
+
+    // Create a second tab
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('tab-new-button'));
+    });
+
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalledTimes(2);
+    });
+
+    // The second session ID is 'session-2'
+    const secondSessionId = 'session-2';
+
+    // Clear mock call history so we can isolate the close call
+    mockCloseSession.mockClear();
+
+    // Close the second (active) tab via its close button
+    const closeButtons = screen.getAllByTestId(/^tab-close-/);
+    await act(async () => {
+      fireEvent.click(closeButtons[closeButtons.length - 1]);
+    });
+
+    // Terminal unmount should trigger useEffect cleanup which calls closeSession
+    await waitFor(() => {
+      expect(mockCloseSession).toHaveBeenCalledWith(secondSessionId);
+    });
+
+    // Only one tab should remain
+    const tabButtons = screen.getAllByTestId(/^tab-button-/);
+    expect(tabButtons).toHaveLength(1);
+  });
+
+  it('test_close_inactive_tab_preserves_active', async () => {
+    let sessionCounter = 0;
+    mockCreateSession.mockImplementation(async () => `session-${++sessionCounter}`);
+
+    render(<TabManager />);
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalledTimes(1);
+    });
+
+    // Create a second tab (becomes active)
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('tab-new-button'));
+    });
+
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalledTimes(2);
+    });
+
+    const secondSessionId = 'session-2';
+
+    // Switch back to tab 1 (click it)
+    const tabButtons = screen.getAllByTestId(/^tab-button-/);
+    await act(async () => {
+      fireEvent.click(tabButtons[0]);
+    });
+
+    // Tab 1 should now be active
+    expect(tabButtons[0]).toHaveClass('tab-button-active');
+
+    // Clear mock call history to isolate the close call
+    mockCloseSession.mockClear();
+
+    // Close tab 2 (the inactive one)
+    const closeButtons = screen.getAllByTestId(/^tab-close-/);
+    await act(async () => {
+      fireEvent.click(closeButtons[closeButtons.length - 1]);
+    });
+
+    // closeSession should have been called for tab 2's session
+    await waitFor(() => {
+      expect(mockCloseSession).toHaveBeenCalledWith(secondSessionId);
+    });
+
+    // Tab 1 should still be present and active
+    const remainingTabs = screen.getAllByTestId(/^tab-button-/);
+    expect(remainingTabs).toHaveLength(1);
+    expect(remainingTabs[0]).toHaveClass('tab-button-active');
+
+    // Tab 1's content should still be visible
+    const tabPanels = document.querySelectorAll('.tab-panel');
+    expect(tabPanels).toHaveLength(1);
+    expect(tabPanels[0]).toHaveStyle({ display: 'flex' });
+
+    // Terminal output area should still exist (tab 1 content preserved)
+    expect(screen.getByTestId('terminal-output')).toBeInTheDocument();
+  });
 });
