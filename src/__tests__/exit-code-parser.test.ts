@@ -49,12 +49,26 @@ describe('extractExitCode', () => {
     expect(result.exitCode).toBe(0);
     expect(result.cleanOutput).toBe('output\n');
   });
+
+  it('test_ignores_marker_not_at_line_start', () => {
+    const result = extractExitCode('echo VELOCITY_EXIT:42\n');
+    expect(result.exitCode).toBeNull();
+    expect(result.cleanOutput).toBe('echo VELOCITY_EXIT:42\n');
+  });
+
+  it('test_strips_all_marker_occurrences', () => {
+    const input = 'output\nVELOCITY_EXIT:0\nmore\nVELOCITY_EXIT:0\n';
+    const result = extractExitCode(input);
+    expect(result.exitCode).toBe(0);
+    expect(result.cleanOutput).not.toContain('VELOCITY_EXIT');
+    expect(result.cleanOutput).toBe('output\nmore\n');
+  });
 });
 
 describe('getExitCodeMarker', () => {
   it('test_powershell_marker', () => {
     const marker = getExitCodeMarker('powershell');
-    expect(marker).toBe('; Write-Output "VELOCITY_EXIT:$LASTEXITCODE"');
+    expect(marker).toBe('; if ($?) { Write-Output "VELOCITY_EXIT:0" } else { Write-Output "VELOCITY_EXIT:1" }');
   });
 
   it('test_cmd_marker', () => {

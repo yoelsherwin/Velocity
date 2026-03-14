@@ -87,7 +87,7 @@ describe('Terminal Component', () => {
     await waitFor(() => {
       expect(mockWriteToSession).toHaveBeenCalledWith(
         'test-session-id',
-        'echo hello; Write-Output "VELOCITY_EXIT:$LASTEXITCODE"\r',
+        'echo hello; if ($?) { Write-Output "VELOCITY_EXIT:0" } else { Write-Output "VELOCITY_EXIT:1" }\r',
       );
     });
   });
@@ -107,7 +107,7 @@ describe('Terminal Component', () => {
     await waitFor(() => {
       expect(mockWriteToSession).toHaveBeenCalledWith(
         'test-session-id',
-        'line1\rline2\rline3; Write-Output "VELOCITY_EXIT:$LASTEXITCODE"\r',
+        'line1\rline2\rline3; if ($?) { Write-Output "VELOCITY_EXIT:0" } else { Write-Output "VELOCITY_EXIT:1" }\r',
       );
     });
   });
@@ -453,7 +453,7 @@ describe('Terminal Component', () => {
     await waitFor(() => {
       expect(mockWriteToSession).toHaveBeenCalledWith(
         'test-session-id',
-        'echo first; Write-Output "VELOCITY_EXIT:$LASTEXITCODE"\r',
+        'echo first; if ($?) { Write-Output "VELOCITY_EXIT:0" } else { Write-Output "VELOCITY_EXIT:1" }\r',
       );
     });
 
@@ -464,7 +464,7 @@ describe('Terminal Component', () => {
     await waitFor(() => {
       expect(mockWriteToSession).toHaveBeenCalledWith(
         'test-session-id',
-        'echo second; Write-Output "VELOCITY_EXIT:$LASTEXITCODE"\r',
+        'echo second; if ($?) { Write-Output "VELOCITY_EXIT:0" } else { Write-Output "VELOCITY_EXIT:1" }\r',
       );
     });
 
@@ -516,7 +516,7 @@ describe('Terminal Component', () => {
     await waitFor(() => {
       expect(mockWriteToSession).toHaveBeenCalledWith(
         'test-session-id',
-        'dir; Write-Output "VELOCITY_EXIT:$LASTEXITCODE"\r',
+        'dir; if ($?) { Write-Output "VELOCITY_EXIT:0" } else { Write-Output "VELOCITY_EXIT:1" }\r',
       );
     });
   });
@@ -549,6 +549,52 @@ describe('Terminal Component', () => {
     await waitFor(() => {
       const output = screen.getByTestId('terminal-output');
       expect(output.textContent).not.toContain('VELOCITY_EXIT');
+    });
+  });
+
+  it('test_exit_code_extracted_when_marker_split_across_chunks', async () => {
+    render(<Terminal />);
+
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    // Submit a command to create a new block
+    const textarea = screen.getByTestId('editor-textarea');
+    fireEvent.change(textarea, { target: { value: 'dir' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(mockWriteToSession).toHaveBeenCalled();
+    });
+
+    // Chunk 1: marker is partially delivered
+    await act(async () => {
+      const outputCallback = eventListeners['pty:output:test-session-id'];
+      if (outputCallback) {
+        outputCallback({ payload: 'file1.txt\nVELOCITY_EXI' });
+      }
+    });
+
+    // After chunk 1, exit code should NOT yet be detected
+    await waitFor(() => {
+      const output = screen.getByTestId('terminal-output');
+      expect(output.textContent).toContain('file1.txt');
+    });
+
+    // Chunk 2: remainder of the marker arrives
+    await act(async () => {
+      const outputCallback = eventListeners['pty:output:test-session-id'];
+      if (outputCallback) {
+        outputCallback({ payload: 'T:0\n' });
+      }
+    });
+
+    // Now the accumulated output should have the full marker, which gets parsed and stripped
+    await waitFor(() => {
+      const output = screen.getByTestId('terminal-output');
+      expect(output.textContent).not.toContain('VELOCITY_EXIT');
+      expect(output.textContent).toContain('file1.txt');
     });
   });
 

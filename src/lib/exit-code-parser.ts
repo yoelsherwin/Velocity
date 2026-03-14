@@ -1,6 +1,10 @@
 import { ShellType } from './types';
 
-const EXIT_CODE_REGEX = /VELOCITY_EXIT:(-?\d+)\r?\n?/;
+/** Match the exit marker only when it starts at the beginning of a line. */
+const EXIT_CODE_REGEX = /^VELOCITY_EXIT:(-?\d+)\r?$/m;
+
+/** Global variant used for stripping all marker occurrences from output. */
+const EXIT_CODE_STRIP_REGEX = /^VELOCITY_EXIT:(-?\d+)\r?\n?/gm;
 
 /**
  * Extract an exit code marker from accumulated PTY output.
@@ -13,7 +17,7 @@ export function extractExitCode(output: string): { cleanOutput: string; exitCode
   const match = output.match(EXIT_CODE_REGEX);
   if (match) {
     const exitCode = parseInt(match[1], 10);
-    const cleanOutput = output.replace(EXIT_CODE_REGEX, '');
+    const cleanOutput = output.replace(EXIT_CODE_STRIP_REGEX, '');
     return { cleanOutput, exitCode };
   }
   return { cleanOutput: output, exitCode: null };
@@ -28,7 +32,7 @@ export function extractExitCode(output: string): { cleanOutput: string; exitCode
 export function getExitCodeMarker(shellType: ShellType): string {
   switch (shellType) {
     case 'powershell':
-      return '; Write-Output "VELOCITY_EXIT:$LASTEXITCODE"';
+      return '; if ($?) { Write-Output "VELOCITY_EXIT:0" } else { Write-Output "VELOCITY_EXIT:1" }';
     case 'cmd':
       return '& echo VELOCITY_EXIT:%ERRORLEVEL%';
     case 'wsl':
