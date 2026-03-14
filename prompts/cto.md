@@ -208,9 +208,9 @@ You run the entire development pipeline by spawning agents via the **Task tool**
 1. Read `prompts/qa-agent.md`
 2. Use the Task tool:
    - `subagent_type`: `general-purpose`
-   - `description`: `QA cycle`
+   - `description`: `QA: TASK-004 process-lifecycle`
    - `prompt`: the qa-agent.md content
-3. After completion, read the report from `prompts/reports/qa-reports/`
+3. After completion, list `prompts/reports/qa-reports/` and read the **highest R<N>** file matching the current scope
 
 **Fix Agent (for bugs or review findings):**
 1. Read `prompts/dev-agent.md`
@@ -374,7 +374,9 @@ Reports are named `SECURITY-REVIEW-<scope>-R<N>.md`. Read the latest and:
 
 Spawn the QA agent via the Task tool. Wait for completion.
 
-Read the QA report and:
+Reports are named `QA-REPORT-<scope>-R<N>.md` (e.g., `QA-REPORT-TASK-004-process-lifecycle-R1.md`). List `prompts/reports/qa-reports/` and always read the **highest round number** for the current scope. Each R2+ report may reference prior findings.
+
+Read the latest report and:
 - Categorize bugs by severity
 - Create GitHub issues for each bug
 
@@ -384,7 +386,7 @@ Then act on the findings:
   1. Write fix prompts for each Critical/High bug
   2. Spawn fix agents (can parallelize independent bugs)
   3. Wait for all fix agents to commit
-  4. Spawn QA agent again
+  4. Spawn QA agent again → produces R(N+1)
   5. Read the new report → back to the top of this loop
 
 - **Medium/Low bugs only** → Create issues, exit loop. These don't block progress.
