@@ -118,7 +118,8 @@ export function getLeafIds(root: PaneNode): string[] {
 export function updatePaneRatio(root: PaneNode, splitId: string, newRatio: number): PaneNode {
   if (root.type === 'leaf') return root;
   if (root.id === splitId) {
-    return { ...root, ratio: newRatio };
+    const clampedRatio = Math.max(0.1, Math.min(0.9, newRatio));
+    return { ...root, ratio: clampedRatio };
   }
 
   const newFirst = updatePaneRatio(root.first, splitId, newRatio);

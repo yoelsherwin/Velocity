@@ -9,6 +9,7 @@ const makeTabs = (count: number): Tab[] =>
     title: `Terminal ${i + 1}`,
     shellType: 'powershell' as const,
     paneRoot: { type: 'leaf' as const, id: `pane-${i + 1}` },
+    focusedPaneId: `pane-${i + 1}`,
   }));
 
 describe('TabBar', () => {

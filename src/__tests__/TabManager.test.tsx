@@ -429,9 +429,6 @@ describe('TabManager', () => {
     });
 
     // After switching back to tab 1, pane 2 should still be focused
-    const tab1PanesAfter = document.querySelectorAll(
-      `[data-testid^="tab-panel-"]:not([style*="display: none"]) [data-testid^="pane-"]`,
-    );
     // Find the pane that has the focused class
     const focusedPane = document.querySelector(
       `[data-testid^="tab-panel-"]:not([style*="display: none"]) .pane-focused`,

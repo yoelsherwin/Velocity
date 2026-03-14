@@ -56,15 +56,6 @@ function TabManager() {
     setActiveTabId(id);
   }, []);
 
-  // Update the focused pane for the currently active tab
-  const updateFocusedPaneId = useCallback((paneId: string | null) => {
-    setTabs((prev) =>
-      prev.map((t) =>
-        t.id === activeTabIdRef.current ? { ...t, focusedPaneId: paneId } : t,
-      ),
-    );
-  }, []);
-
   const handleNewTab = useCallback(() => {
     tabCounterRef.current += 1;
     const initialPaneId = crypto.randomUUID();
