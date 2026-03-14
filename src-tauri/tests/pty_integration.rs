@@ -169,27 +169,60 @@ fn test_session_close_produces_closed_event() {
         .write_to_session(&session_id, "exit\r")
         .expect("Failed to write exit command");
 
-    // On Windows ConPTY, the PTY reader may not receive EOF immediately
-    // after the shell process exits -- it can take several seconds for the
-    // ConPTY handle to close. We use a longer timeout and also check
-    // whether close_session (which kills the child) triggers the Closed event.
-    let mut events = collect_events(&rx, Duration::from_secs(5));
-
-    if !has_closed_event(&events) {
-        // The shell may have exited but ConPTY hasn't closed the pipe yet.
-        // Force close the session to trigger reader thread termination.
-        let _ = manager.close_session(&session_id);
-        let more = collect_events(&rx, Duration::from_secs(5));
-        events.extend(more);
-    }
+    // The watchdog thread polls child.try_wait() every 500ms and drops the
+    // master PTY handle when the child exits, unblocking the reader thread.
+    // Allow up to 10 seconds for PowerShell to exit + watchdog to detect it.
+    let events = collect_events(&rx, Duration::from_secs(10));
 
     assert!(
         has_closed_event(&events),
-        "Expected PtyEvent::Closed after 'exit' command. Events received: {}",
+        "Expected PtyEvent::Closed after 'exit' command (via watchdog). Events received: {}",
         events.len()
     );
 
     // Clean up (session may already be gone from exit, ignore errors)
+    let _ = manager.close_session(&session_id);
+}
+
+// ─── Test 9: Process exit detected via watchdog ─────────────────────────
+
+#[test]
+fn test_process_exit_detected_via_watchdog() {
+    // This test verifies the core fix: the watchdog thread detects that the
+    // child process has exited and drops the master PTY handle, which unblocks
+    // the reader thread so it sends PtyEvent::Closed.
+    //
+    // Critically, this test does NOT call close_session() -- the Closed event
+    // must arrive purely from the watchdog detecting the child exit.
+    let mut manager = SessionManager::new();
+
+    let (session_id, rx) = manager
+        .create_session_with_channel("powershell", 24, 80)
+        .expect("Failed to create session");
+
+    // Wait for PowerShell to be ready
+    std::thread::sleep(Duration::from_millis(1000));
+
+    // Drain initial prompt output
+    let _ = collect_events(&rx, Duration::from_millis(500));
+
+    // Send exit command -- this causes PowerShell to terminate
+    manager
+        .write_to_session(&session_id, "exit\r")
+        .expect("Failed to write exit command");
+
+    // Wait for the watchdog to detect the exit and unblock the reader.
+    // Budget: PowerShell exit (~1-2s) + watchdog poll interval (500ms) + margin.
+    let events = collect_events(&rx, Duration::from_secs(10));
+
+    assert!(
+        has_closed_event(&events),
+        "Expected PtyEvent::Closed from watchdog after 'exit' command \
+         (WITHOUT calling close_session). Events received: {}",
+        events.len()
+    );
+
+    // Clean up (session is still in the manager's map, remove it)
     let _ = manager.close_session(&session_id);
 }
 

@@ -4,12 +4,15 @@ use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tauri::AppHandle;
 use tauri::Emitter;
 use uuid::Uuid;
 
 pub const MAX_SESSIONS: usize = 20;
+
+/// Polling interval for the child process watchdog thread.
+const WATCHDOG_POLL_INTERVAL_MS: u64 = 500;
 
 /// Events produced by the PTY reader thread.
 ///
@@ -52,10 +55,15 @@ pub fn validate_shell_type(shell_type: &str) -> Result<(), String> {
 pub struct ShellSession {
     #[allow(dead_code)] // Reserved for future use (session listing, tab labels)
     pub id: String,
-    #[allow(dead_code)]
-    master: Box<dyn MasterPty + Send>,
+    /// Master PTY handle, shared with the watchdog thread.
+    /// The watchdog drops this when the child process exits, which unblocks
+    /// the reader thread's `read()` call (ConPTY workaround).
+    master: Arc<Mutex<Option<Box<dyn MasterPty + Send>>>>,
     writer: Box<dyn Write + Send>,
-    child: Box<dyn Child + Send + Sync>,
+    /// Child process handle, shared with the watchdog thread.
+    /// Wrapped in Arc<Mutex<Option<...>>> so the watchdog can take ownership
+    /// when the child exits, and close_session can still kill it if needed.
+    child: Arc<Mutex<Option<Box<dyn Child + Send + Sync>>>>,
     #[allow(dead_code)] // Reserved for future use (session listing, tab labels)
     pub shell_type: String,
     shutdown: Arc<AtomicBool>,
@@ -117,6 +125,79 @@ fn spawn_reader_thread(
             }
         }
         let _ = tx.send(PtyEvent::Closed);
+    });
+}
+
+/// Spawn the watchdog thread that monitors the child process and drops the
+/// master PTY handle when the child exits.
+///
+/// On Windows, ConPTY keeps the read pipe open after the shell process exits,
+/// so the reader thread blocks forever on `read()`. The watchdog detects child
+/// exit via `try_wait()` and drops the master handle, which causes the reader's
+/// cloned handle to get an error, unblocking it so it can send `PtyEvent::Closed`.
+fn spawn_watchdog_thread(
+    child: Arc<Mutex<Option<Box<dyn Child + Send + Sync>>>>,
+    master: Arc<Mutex<Option<Box<dyn MasterPty + Send>>>>,
+    shutdown_flag: Arc<AtomicBool>,
+    session_id: String,
+) {
+    std::thread::spawn(move || {
+        loop {
+            // If shutdown was requested (e.g., close_session was called), stop watching.
+            if shutdown_flag.load(Ordering::Relaxed) {
+                if cfg!(debug_assertions) {
+                    eprintln!("[pty:{}] watchdog: shutdown flag set, exiting", session_id);
+                }
+                break;
+            }
+
+            // Check if the child process has exited.
+            let child_exited = {
+                let mut child_guard = match child.lock() {
+                    Ok(guard) => guard,
+                    Err(_) => break, // Mutex poisoned, bail out
+                };
+                match child_guard.as_mut() {
+                    Some(c) => match c.try_wait() {
+                        Ok(Some(_status)) => {
+                            // Child has exited. Take it out so close_session knows it's gone.
+                            let _ = child_guard.take();
+                            true
+                        }
+                        Ok(None) => false, // Still running
+                        Err(_) => {
+                            // Error checking status -- treat as exited
+                            let _ = child_guard.take();
+                            true
+                        }
+                    },
+                    None => {
+                        // Child already taken (close_session or previous watchdog iteration).
+                        // Nothing to watch, exit the watchdog.
+                        break;
+                    }
+                }
+            };
+
+            if child_exited {
+                if cfg!(debug_assertions) {
+                    eprintln!(
+                        "[pty:{}] watchdog: child process exited, dropping master PTY",
+                        session_id
+                    );
+                }
+                // Set the shutdown flag so the reader thread knows to stop.
+                shutdown_flag.store(true, Ordering::Relaxed);
+                // Drop the master PTY handle. This closes the ConPTY, which causes
+                // the reader's cloned handle to return an error on the next read.
+                if let Ok(mut master_guard) = master.lock() {
+                    let _ = master_guard.take();
+                }
+                break;
+            }
+
+            std::thread::sleep(std::time::Duration::from_millis(WATCHDOG_POLL_INTERVAL_MS));
+        }
     });
 }
 
@@ -242,9 +323,9 @@ impl SessionManager {
 
         let session = ShellSession {
             id: session_id.clone(),
-            master: pair.master,
+            master: Arc::new(Mutex::new(Some(pair.master))),
             writer,
-            child,
+            child: Arc::new(Mutex::new(Some(child))),
             shell_type: shell_type.to_string(),
             shutdown,
             reader: Some(reader),
@@ -312,7 +393,15 @@ impl SessionManager {
         let (tx, rx) = mpsc::channel::<PtyEvent>();
 
         // Spawn reader thread: PTY -> channel
-        spawn_reader_thread(reader, tx, shutdown_flag, sid.clone());
+        spawn_reader_thread(reader, tx, shutdown_flag.clone(), sid.clone());
+
+        // Spawn watchdog thread: monitors child process, drops master on exit
+        spawn_watchdog_thread(
+            session.child.clone(),
+            session.master.clone(),
+            shutdown_flag,
+            sid.clone(),
+        );
 
         // Spawn bridge thread: channel -> Tauri events
         spawn_bridge_thread(rx, app_handle, sid);
@@ -348,7 +437,15 @@ impl SessionManager {
         let (tx, rx) = mpsc::channel::<PtyEvent>();
 
         // Spawn reader thread: PTY -> channel (no bridge, test reads directly)
-        spawn_reader_thread(reader, tx, shutdown_flag, sid);
+        spawn_reader_thread(reader, tx, shutdown_flag.clone(), sid.clone());
+
+        // Spawn watchdog thread: monitors child process, drops master on exit
+        spawn_watchdog_thread(
+            session.child.clone(),
+            session.master.clone(),
+            shutdown_flag,
+            sid,
+        );
 
         Ok(rx)
     }
@@ -382,8 +479,16 @@ impl SessionManager {
             .get(session_id)
             .ok_or_else(|| format!("Session not found: {}", session_id))?;
 
-        session
+        let master_guard = session
             .master
+            .lock()
+            .map_err(|e| format!("Failed to lock master PTY: {}", e))?;
+
+        let master = master_guard
+            .as_ref()
+            .ok_or_else(|| "Master PTY already closed".to_string())?;
+
+        master
             .resize(PtySize {
                 rows,
                 cols,
@@ -397,25 +502,37 @@ impl SessionManager {
 
     pub fn close_session(&mut self, session_id: &str) -> Result<(), String> {
         validate_session_id(session_id)?;
-        let mut session = self
+        let session = self
             .sessions
             .remove(session_id)
             .ok_or_else(|| format!("Session not found: {}", session_id))?;
 
-        // Signal reader thread to stop
+        // Signal reader and watchdog threads to stop
         session.shutdown.store(true, Ordering::Relaxed);
 
-        // Kill the child process -- ignore errors (may already be dead)
-        let _ = session.child.kill();
+        // Kill the child process if the watchdog hasn't already taken it.
+        if let Ok(mut child_guard) = session.child.lock() {
+            if let Some(ref mut child) = *child_guard {
+                // Kill the child process -- ignore errors (may already be dead)
+                let _ = child.kill();
 
-        // Wait for child to exit to avoid zombie process handles
-        std::thread::sleep(std::time::Duration::from_millis(100));
-        match session.child.try_wait() {
-            Ok(Some(_status)) => {} // Exited cleanly
-            _ => {
-                // Force wait -- blocking but should be fast after kill
-                let _ = session.child.wait();
+                // Wait for child to exit to avoid zombie process handles
+                std::thread::sleep(std::time::Duration::from_millis(100));
+                match child.try_wait() {
+                    Ok(Some(_status)) => {} // Exited cleanly
+                    _ => {
+                        // Force wait -- blocking but should be fast after kill
+                        let _ = child.wait();
+                    }
+                }
             }
+            // Take the child out so the watchdog (if still running) sees None and exits.
+            let _ = child_guard.take();
+        }
+
+        // Drop the master PTY handle to unblock the reader thread if it's still blocked.
+        if let Ok(mut master_guard) = session.master.lock() {
+            let _ = master_guard.take();
         }
 
         Ok(())
