@@ -80,4 +80,83 @@ describe('InputEditor Component', () => {
     expect(commandSpan).not.toBeNull();
     expect(commandSpan!.textContent).toBe('echo');
   });
+
+  // --- Task 011: Ghost text + history navigation tests ---
+
+  it('test_ghost_text_rendered', () => {
+    render(
+      <InputEditor {...defaultProps} value="git co" ghostText="mmit" />,
+    );
+    const editor = screen.getByTestId('input-editor');
+    const ghostSpan = editor.querySelector('.ghost-text');
+    expect(ghostSpan).not.toBeNull();
+    expect(ghostSpan!.textContent).toBe('mmit');
+  });
+
+  it('test_tab_accepts_ghost_text', () => {
+    const onChange = vi.fn();
+    render(
+      <InputEditor
+        {...defaultProps}
+        value="git co"
+        onChange={onChange}
+        ghostText="mmit"
+      />,
+    );
+    const textarea = screen.getByTestId('editor-textarea');
+    fireEvent.keyDown(textarea, { key: 'Tab' });
+    expect(onChange).toHaveBeenCalledWith('git commit');
+  });
+
+  it('test_tab_inserts_spaces_without_ghost', () => {
+    const onChange = vi.fn();
+    render(
+      <InputEditor
+        {...defaultProps}
+        value="echo"
+        onChange={onChange}
+        ghostText={null}
+      />,
+    );
+    const textarea = screen.getByTestId('editor-textarea') as HTMLTextAreaElement;
+    // Place cursor at end of text so spaces are inserted after "echo"
+    textarea.selectionStart = 4;
+    textarea.selectionEnd = 4;
+    fireEvent.keyDown(textarea, { key: 'Tab' });
+    expect(onChange).toHaveBeenCalledWith('echo  ');
+  });
+
+  it('test_up_arrow_calls_onNavigateUp', () => {
+    const onNavigateUp = vi.fn().mockReturnValue('ls');
+    const onChange = vi.fn();
+    render(
+      <InputEditor
+        {...defaultProps}
+        value=""
+        onChange={onChange}
+        onNavigateUp={onNavigateUp}
+      />,
+    );
+    const textarea = screen.getByTestId('editor-textarea');
+    fireEvent.keyDown(textarea, { key: 'ArrowUp' });
+    expect(onNavigateUp).toHaveBeenCalled();
+    expect(onChange).toHaveBeenCalledWith('ls');
+  });
+
+  it('test_down_arrow_calls_onNavigateDown', () => {
+    const onNavigateDown = vi.fn().mockReturnValue('pwd');
+    const onChange = vi.fn();
+    render(
+      <InputEditor
+        {...defaultProps}
+        value=""
+        onChange={onChange}
+        onNavigateDown={onNavigateDown}
+      />,
+    );
+    const textarea = screen.getByTestId('editor-textarea');
+    fireEvent.keyDown(textarea, { key: 'ArrowDown' });
+    expect(onNavigateDown).toHaveBeenCalled();
+    expect(onChange).toHaveBeenCalledWith('pwd');
+  });
 });

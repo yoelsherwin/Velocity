@@ -4,6 +4,8 @@ import { createSession, writeToSession, closeSession, startReading } from '../li
 import { SHELL_TYPES, ShellType, Block } from '../lib/types';
 import BlockView from './blocks/BlockView';
 import InputEditor from './editor/InputEditor';
+import { useCommandHistory } from '../hooks/useCommandHistory';
+import { useGhostText } from '../hooks/useGhostText';
 
 export const MAX_BLOCKS = 50;
 
@@ -35,6 +37,9 @@ function Terminal() {
   const outputRef = useRef<HTMLDivElement>(null);
   const unlistenRefs = useRef<(() => void)[]>([]);
   const startSessionIdRef = useRef(0);
+
+  const { history, addCommand, navigateUp, navigateDown, reset, setDraft } = useCommandHistory();
+  const { suggestion } = useGhostText(input, history);
 
   const updateSessionId = useCallback((id: string | null) => {
     sessionIdRef.current = id;
@@ -255,6 +260,36 @@ function Terminal() {
     [submitCommand],
   );
 
+  const handleSubmit = useCallback(
+    (cmd: string) => {
+      const trimmed = cmd.trim();
+      if (trimmed) {
+        addCommand(trimmed);
+        submitCommand(trimmed);
+      }
+      setInput('');
+    },
+    [addCommand, submitCommand],
+  );
+
+  const handleInputChange = useCallback(
+    (newValue: string) => {
+      setInput(newValue);
+      setDraft(newValue);
+      reset();
+    },
+    [setDraft, reset],
+  );
+
+  const handleNavigateUp = useCallback(() => {
+    setDraft(input);
+    return navigateUp();
+  }, [input, setDraft, navigateUp]);
+
+  const handleNavigateDown = useCallback(() => {
+    return navigateDown();
+  }, [navigateDown]);
+
   return (
     <div className="terminal-container">
       <div className="shell-selector" role="tablist" data-testid="shell-selector">
@@ -300,9 +335,12 @@ function Terminal() {
         <div data-testid="terminal-input">
           <InputEditor
             value={input}
-            onChange={setInput}
-            onSubmit={(cmd) => { const trimmed = cmd.trim(); if (trimmed) { submitCommand(trimmed); } setInput(''); }}
+            onChange={handleInputChange}
+            onSubmit={handleSubmit}
             disabled={closed}
+            ghostText={suggestion}
+            onNavigateUp={handleNavigateUp}
+            onNavigateDown={handleNavigateDown}
           />
         </div>
       )}

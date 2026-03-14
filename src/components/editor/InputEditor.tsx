@@ -6,9 +6,12 @@ interface InputEditorProps {
   onChange: (value: string) => void;
   onSubmit: (value: string) => void;
   disabled?: boolean;
+  ghostText?: string | null;
+  onNavigateUp?: () => string | null;
+  onNavigateDown?: () => string | null;
 }
 
-function InputEditor({ value, onChange, onSubmit, disabled }: InputEditorProps) {
+function InputEditor({ value, onChange, onSubmit, disabled, ghostText, onNavigateUp, onNavigateDown }: InputEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const tokens = useMemo(() => tokenize(value), [value]);
@@ -20,22 +23,55 @@ function InputEditor({ value, onChange, onSubmit, disabled }: InputEditorProps) 
         onSubmit(value);
       } else if (e.key === 'Tab') {
         e.preventDefault();
-        // Insert 2 spaces at cursor position
+        if (ghostText) {
+          // Accept ghost text suggestion
+          onChange(value + ghostText);
+        } else {
+          // Insert 2 spaces at cursor position
+          const textarea = textareaRef.current;
+          if (textarea) {
+            const start = textarea.selectionStart;
+            const end = textarea.selectionEnd;
+            const newValue = value.substring(0, start) + '  ' + value.substring(end);
+            onChange(newValue);
+            // Restore cursor position after React re-renders
+            requestAnimationFrame(() => {
+              textarea.selectionStart = start + 2;
+              textarea.selectionEnd = start + 2;
+            });
+          }
+        }
+      } else if (e.key === 'ArrowUp' && !e.shiftKey) {
+        // Only intercept if cursor is on the first line
         const textarea = textareaRef.current;
-        if (textarea) {
-          const start = textarea.selectionStart;
-          const end = textarea.selectionEnd;
-          const newValue = value.substring(0, start) + '  ' + value.substring(end);
-          onChange(newValue);
-          // Restore cursor position after React re-renders
-          requestAnimationFrame(() => {
-            textarea.selectionStart = start + 2;
-            textarea.selectionEnd = start + 2;
-          });
+        if (textarea && textarea.selectionStart === textarea.selectionEnd) {
+          const textBeforeCursor = value.substring(0, textarea.selectionStart);
+          if (!textBeforeCursor.includes('\n')) {
+            // Cursor is on the first line — navigate history
+            e.preventDefault();
+            const prev = onNavigateUp?.();
+            if (prev !== null && prev !== undefined) {
+              onChange(prev);
+            }
+          }
+        }
+      } else if (e.key === 'ArrowDown' && !e.shiftKey) {
+        // Only intercept if cursor is on the last line
+        const textarea = textareaRef.current;
+        if (textarea && textarea.selectionStart === textarea.selectionEnd) {
+          const textAfterCursor = value.substring(textarea.selectionEnd);
+          if (!textAfterCursor.includes('\n')) {
+            // Cursor is on the last line — navigate history
+            e.preventDefault();
+            const next = onNavigateDown?.();
+            if (next !== null && next !== undefined) {
+              onChange(next);
+            }
+          }
         }
       }
     },
-    [value, onSubmit, onChange],
+    [value, onSubmit, onChange, ghostText, onNavigateUp, onNavigateDown],
   );
 
   return (
@@ -48,6 +84,7 @@ function InputEditor({ value, onChange, onSubmit, disabled }: InputEditorProps) 
               {token.value}
             </span>
           ))}
+          {ghostText && <span className="ghost-text">{ghostText}</span>}
           {'\n'}
         </pre>
         <textarea

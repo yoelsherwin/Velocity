@@ -258,6 +258,13 @@ html, body, #root {
 .token-argument { color: #cdd6f4; }
 .token-whitespace { /* inherits */ }
 
+/* Ghost text — faded type-ahead suggestion */
+.ghost-text {
+  color: #585b70;  /* Catppuccin Mocha surface2 — faded */
+  pointer-events: none;
+  user-select: none;
+}
+
 /* --- Tab Layout Styles --- */
 
 .tab-manager {
