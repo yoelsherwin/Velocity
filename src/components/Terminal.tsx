@@ -234,7 +234,7 @@ function Terminal() {
           : withNew;
       });
       activeBlockIdRef.current = newBlock.id;
-      writeToSession(sessionIdRef.current, command + '\r').catch((err) => {
+      writeToSession(sessionIdRef.current, command.replace(/\n/g, '\r') + '\r').catch((err) => {
         setBlocks((prev) =>
           prev.map((b) =>
             b.id === newBlock.id

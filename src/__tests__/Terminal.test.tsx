@@ -92,6 +92,26 @@ describe('Terminal Component', () => {
     });
   });
 
+  it('test_multiline_command_sends_carriage_returns', async () => {
+    render(<Terminal />);
+
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    const textarea = screen.getByTestId('editor-textarea');
+    // Simulate a multi-line command (as produced by Shift+Enter)
+    fireEvent.change(textarea, { target: { value: 'line1\nline2\nline3' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(mockWriteToSession).toHaveBeenCalledWith(
+        'test-session-id',
+        'line1\rline2\rline3\r',
+      );
+    });
+  });
+
   it('test_clears_input_after_enter', async () => {
     render(<Terminal />);
 

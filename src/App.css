@@ -217,11 +217,12 @@ html, body, #root {
 
 .editor-area {
   flex: 1;
-  position: relative;
+  display: grid;
 }
 
 .editor-textarea,
 .editor-highlight {
+  grid-area: 1 / 1;
   font-family: 'Cascadia Code', 'Consolas', 'Courier New', monospace;
   font-size: 14px;
   line-height: 1.4;
@@ -234,7 +235,6 @@ html, body, #root {
 }
 
 .editor-textarea {
-  position: relative;
   width: 100%;
   resize: none;
   background: transparent;
@@ -245,10 +245,6 @@ html, body, #root {
 }
 
 .editor-highlight {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
   pointer-events: none;
   color: #cdd6f4;
   z-index: 0;

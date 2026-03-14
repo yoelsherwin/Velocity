@@ -13,11 +13,6 @@ function InputEditor({ value, onChange, onSubmit, disabled }: InputEditorProps) 
 
   const tokens = useMemo(() => tokenize(value), [value]);
 
-  const lineCount = useMemo(() => {
-    const count = value.split('\n').length;
-    return Math.max(1, count);
-  }, [value]);
-
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === 'Enter' && !e.shiftKey) {
@@ -62,7 +57,7 @@ function InputEditor({ value, onChange, onSubmit, disabled }: InputEditorProps) 
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={handleKeyDown}
-          rows={lineCount}
+          rows={1}
           disabled={disabled}
           autoFocus
           spellCheck={false}
