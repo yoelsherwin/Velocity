@@ -127,7 +127,7 @@ describe('InputEditor Component', () => {
   });
 
   it('test_up_arrow_calls_onNavigateUp', () => {
-    const onNavigateUp = vi.fn().mockReturnValue('ls');
+    const onNavigateUp = vi.fn();
     const onChange = vi.fn();
     render(
       <InputEditor
@@ -140,11 +140,12 @@ describe('InputEditor Component', () => {
     const textarea = screen.getByTestId('editor-textarea');
     fireEvent.keyDown(textarea, { key: 'ArrowUp' });
     expect(onNavigateUp).toHaveBeenCalled();
-    expect(onChange).toHaveBeenCalledWith('ls');
+    // onChange should NOT be called — Terminal handles state update directly
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it('test_down_arrow_calls_onNavigateDown', () => {
-    const onNavigateDown = vi.fn().mockReturnValue('pwd');
+    const onNavigateDown = vi.fn();
     const onChange = vi.fn();
     render(
       <InputEditor
@@ -157,6 +158,7 @@ describe('InputEditor Component', () => {
     const textarea = screen.getByTestId('editor-textarea');
     fireEvent.keyDown(textarea, { key: 'ArrowDown' });
     expect(onNavigateDown).toHaveBeenCalled();
-    expect(onChange).toHaveBeenCalledWith('pwd');
+    // onChange should NOT be called — Terminal handles state update directly
+    expect(onChange).not.toHaveBeenCalled();
   });
 });

@@ -7,8 +7,8 @@ interface InputEditorProps {
   onSubmit: (value: string) => void;
   disabled?: boolean;
   ghostText?: string | null;
-  onNavigateUp?: () => string | null;
-  onNavigateDown?: () => string | null;
+  onNavigateUp?: () => void;
+  onNavigateDown?: () => void;
 }
 
 function InputEditor({ value, onChange, onSubmit, disabled, ghostText, onNavigateUp, onNavigateDown }: InputEditorProps) {
@@ -49,10 +49,8 @@ function InputEditor({ value, onChange, onSubmit, disabled, ghostText, onNavigat
           if (!textBeforeCursor.includes('\n')) {
             // Cursor is on the first line — navigate history
             e.preventDefault();
-            const prev = onNavigateUp?.();
-            if (prev !== null && prev !== undefined) {
-              onChange(prev);
-            }
+            onNavigateUp?.();
+            // Don't call onChange — Terminal handles the state update directly
           }
         }
       } else if (e.key === 'ArrowDown' && !e.shiftKey) {
@@ -63,10 +61,8 @@ function InputEditor({ value, onChange, onSubmit, disabled, ghostText, onNavigat
           if (!textAfterCursor.includes('\n')) {
             // Cursor is on the last line — navigate history
             e.preventDefault();
-            const next = onNavigateDown?.();
-            if (next !== null && next !== undefined) {
-              onChange(next);
-            }
+            onNavigateDown?.();
+            // Don't call onChange — Terminal handles the state update directly
           }
         }
       }

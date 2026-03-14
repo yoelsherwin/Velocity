@@ -283,11 +283,17 @@ function Terminal() {
 
   const handleNavigateUp = useCallback(() => {
     setDraft(input);
-    return navigateUp();
+    const prev = navigateUp();
+    if (prev !== null) {
+      setInput(prev);
+    }
   }, [input, setDraft, navigateUp]);
 
   const handleNavigateDown = useCallback(() => {
-    return navigateDown();
+    const next = navigateDown();
+    if (next !== null) {
+      setInput(next);
+    }
   }, [navigateDown]);
 
   return (

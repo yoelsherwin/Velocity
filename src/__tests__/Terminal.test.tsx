@@ -435,6 +435,52 @@ describe('Terminal Component', () => {
 
   // --- FIX-007: StrictMode double-mount cancellation test ---
 
+  // --- Task 011 fix: Integration test for repeated Up arrow history navigation ---
+
+  it('test_up_arrow_twice_shows_first_command', async () => {
+    render(<Terminal />);
+
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    const textarea = screen.getByTestId('editor-textarea') as HTMLTextAreaElement;
+
+    // Type and submit first command
+    fireEvent.change(textarea, { target: { value: 'echo first' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(mockWriteToSession).toHaveBeenCalledWith(
+        'test-session-id',
+        'echo first\r',
+      );
+    });
+
+    // Type and submit second command
+    fireEvent.change(textarea, { target: { value: 'echo second' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(mockWriteToSession).toHaveBeenCalledWith(
+        'test-session-id',
+        'echo second\r',
+      );
+    });
+
+    // Press Up once — should show "echo second" (most recent)
+    fireEvent.keyDown(textarea, { key: 'ArrowUp' });
+    await waitFor(() => {
+      expect(textarea.value).toBe('echo second');
+    });
+
+    // Press Up again — should show "echo first" (earlier command)
+    fireEvent.keyDown(textarea, { key: 'ArrowUp' });
+    await waitFor(() => {
+      expect(textarea.value).toBe('echo first');
+    });
+  });
+
   it('test_startSession_cancels_on_remount', async () => {
     // Simulate StrictMode double-mount: createSession returns different IDs
     // for each call, and the first session should be cleaned up.

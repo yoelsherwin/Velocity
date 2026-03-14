@@ -2,7 +2,6 @@ import { useState, useCallback, useRef } from 'react';
 
 interface UseCommandHistory {
   history: string[];
-  historyIndex: number | null;
   addCommand: (command: string) => void;
   navigateUp: () => string | null;
   navigateDown: () => string | null;
@@ -96,7 +95,6 @@ export function useCommandHistory(maxHistory: number = DEFAULT_MAX_HISTORY): Use
 
   return {
     history,
-    historyIndex: indexRef.current,
     addCommand,
     navigateUp,
     navigateDown,
