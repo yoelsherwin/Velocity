@@ -4,11 +4,11 @@
 > Last updated at: `2026-03-14`
 
 ## Current Phase
-Feature development — Pillars 1-4 COMPLETE. Ready for Pillar 5 (Agent Mode).
+Feature development — ALL MVP PILLARS COMPLETE (except Pillar 5 Agent Mode). Ready for Pillar 5.
 
 ## Backlog Position
 Pillar: 5 (Agent Mode)
-Next task number: 011
+Next task number: 015
 
 ## Completed Tasks
 
@@ -22,9 +22,12 @@ Next task number: 011
 | TASK-006 | PTY channel refactor + integration tests | `9ccbc42` | APPROVED R1 | N/A | N/A |
 | TASK-007 | E2E tests with Playwright | `37dda08` | N/A | N/A | N/A |
 | TASK-008 | Input editor — multi-line + syntax highlighting | `e1afb70` | APPROVED R2 | N/A | PASS |
-| TASK-009 | Tabbed interface with independent sessions | `21d7967` | APPROVED R2 | N/A | PASS |
-| TASK-010 | Split panes — vertical and horizontal | `f789ab6` | APPROVED R2 | N/A | PASS |
-| FIX-011 | Batch fix for missed findings (QA audit) | `b19111d` | APPROVED R1 | N/A | N/A |
+| TASK-009 | Tabbed interface | `21d7967` | APPROVED R2 | N/A | PASS |
+| TASK-010 | Split panes | `f789ab6` | APPROVED R2 | N/A | PASS |
+| TASK-011 | Ghost text + command history | `525aade` | APPROVED R2 | N/A | N/A |
+| TASK-012 | Exit codes via shell markers | `47dedf8` | APPROVED (R1+fix) | PASS R1 | PASS |
+| TASK-013 | Draggable pane dividers | `8613c86` | APPROVED R1 | PASS R1 | PASS |
+| TASK-014 | Per-tab pane focus | `b99bba1` | APPROVED R1 | PASS R1 | PASS |
 
 ## In Progress
 None.
@@ -33,58 +36,43 @@ None.
 
 ### Medium Severity
 - **BUG-004**: Full ANSI re-parse per PTY event (perf).
-- **BUG-008**: Old session output flash on shell switch.
-- **BUG-009**: Rapid shell switching race creates orphaned sessions.
+- **BUG-009**: Rapid shell switching race → orphaned sessions.
 - **BUG-020**: Welcome block retains `running` status after session close.
 - **BUG-025**: No per-block output size limit.
 - **BUG-033**: Tab close → closeSession fire-and-forget.
-- **BUG-034**: No frontend enforcement of MAX_SESSIONS for tabs (panes have MAX_PANES_TOTAL=20).
-- **CR-002-I4**: UTF-8 lossy conversion splits multi-byte chars.
+- **BUG-034**: No frontend MAX_SESSIONS enforcement for tabs.
+- **SEC-012-M1**: Marker spoofing — programs can forge `VELOCITY_EXIT:0`.
+- **SEC-012-M2**: PowerShell exit codes limited to 0/1 (uses `$?` not `$LASTEXITCODE`).
 
 ### Low Severity
-- **BUG-010**: Rapid restart clicks orphan sessions.
-- **BUG-028**: Tokenizer misclassifies flag-like filenames after redirects.
-- **BUG-029**: Tokenizer doesn't recognize `;`, `&&`, `||`.
-- **BUG-031**: Overlay scroll desync on long content.
-- **BUG-032**: Disabled state doesn't gate handleKeyDown.
-- **BUG-035**: autoFocus on hidden tabs.
-- **BUG-038**: Ctrl+W preventDefault with 1 tab.
-- **QA-010-BUG-002**: focusedPaneId is global not per-tab.
-- **QA-010-BUG-003**: Ctrl+\ doesn't guard against Shift key.
+- BUG-010, 028, 029, 031, 032, 035, 038
 
 ### Accepted Risk
-- **SEC-002-H1**: Full parent env inherited by shells.
-- **SEC-001-M1**: `unsafe-inline` in style-src CSP.
-- **SEC-005-M1**: Rerun without confirmation (industry standard).
+- SEC-002-H1: Full parent env inherited by shells
+- SEC-001-M1: `unsafe-inline` in style-src CSP
+- SEC-005-M1: Rerun without confirmation
 
 ## Pillar Status
 
 | Pillar | Status | Notes |
 |--------|--------|-------|
 | 1. Process Interfacing | **COMPLETE** | PTY, streaming, ANSI filter, lifecycle, shells |
-| 2. Block Model | **COMPLETE** (MVP) | Blocks, copy/rerun. Exit codes deferred. |
-| 3. Input Editor | **COMPLETE** (3a+3b) | Multi-line, syntax highlighting. Ghost text deferred. |
-| 4. Structural Layout | **COMPLETE** | Tabs (4a), split panes (4b), focus (4c), sessions (4d) |
+| 2. Block Model | **COMPLETE** | Blocks, copy/rerun, exit codes |
+| 3. Input Editor | **COMPLETE** | Multi-line, syntax highlighting, ghost text, history |
+| 4. Structural Layout | **COMPLETE** | Tabs, split panes, drag resize, per-tab focus |
 | 5. Agent Mode | Not started | Final pillar |
 
 ## Test Summary
 
 | Layer | Suite | Count |
 |-------|-------|-------|
-| Unit | Vitest (frontend) | 101 |
+| Unit | Vitest (frontend) | 153 |
 | Unit | cargo test (Rust) | 36 (+1 ignored) |
 | Integration | Rust PTY (real PowerShell) | 9 |
 | E2E | Playwright (real app + CDP) | 8 |
-| **Total** | | **154** |
+| **Total** | | **206** |
 
 ## Last Security Review
-- Scope: TASK-005 (block model)
-- HEAD at review: `5e6afb6`
-- Note: Security review needed for the full Pillar 4 batch before Pillar 5
-
-## Notes
-- Pane tree uses discriminated unions (leaf | split) with pure immutable operations
-- MAX_PANES_TOTAL=20 enforced on frontend (matches backend MAX_SESSIONS)
-- Keyboard: Ctrl+T (tab), Ctrl+W (close tab), Ctrl+Shift+Right (split h), Ctrl+Shift+Down (split v), Ctrl+Shift+W (close pane)
-- Each pane's Terminal has `key={node.id}` for correct React reconciliation
-- Drag-to-resize pane dividers deferred (ratio fixed at 0.5)
+- Scope: TASKS-012-014 batch
+- HEAD at review: `7ace1a7`
+- Report: `SECURITY-REVIEW-TASKS-012-014-R1.md`
