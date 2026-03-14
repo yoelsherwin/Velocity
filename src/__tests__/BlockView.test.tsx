@@ -83,4 +83,57 @@ describe('BlockView Component', () => {
     fireEvent.click(rerunBtn);
     expect(mockOnRerun).toHaveBeenCalledWith('dir');
   });
+
+  // --- Task 012: Exit code display tests ---
+
+  it('test_shows_success_indicator_for_exit_code_zero', () => {
+    const block: Block = {
+      ...baseBlock,
+      exitCode: 0,
+    };
+    const { container } = render(
+      <BlockView block={block} isActive={false} onRerun={mockOnRerun} />,
+    );
+    const indicator = container.querySelector('.exit-success');
+    expect(indicator).toBeInTheDocument();
+    expect(indicator!.textContent).toContain('\u2713');
+  });
+
+  it('test_shows_failure_indicator_for_nonzero_exit_code', () => {
+    const block: Block = {
+      ...baseBlock,
+      exitCode: 1,
+    };
+    const { container } = render(
+      <BlockView block={block} isActive={false} onRerun={mockOnRerun} />,
+    );
+    const indicator = container.querySelector('.exit-failure');
+    expect(indicator).toBeInTheDocument();
+    expect(indicator!.textContent).toContain('\u2717');
+    expect(indicator!.textContent).toContain('1');
+  });
+
+  it('test_no_exit_code_shows_no_indicator', () => {
+    const block: Block = {
+      ...baseBlock,
+      exitCode: undefined,
+    };
+    const { container } = render(
+      <BlockView block={block} isActive={false} onRerun={mockOnRerun} />,
+    );
+    expect(container.querySelector('.exit-success')).not.toBeInTheDocument();
+    expect(container.querySelector('.exit-failure')).not.toBeInTheDocument();
+  });
+
+  it('test_null_exit_code_shows_no_indicator', () => {
+    const block: Block = {
+      ...baseBlock,
+      exitCode: null,
+    };
+    const { container } = render(
+      <BlockView block={block} isActive={false} onRerun={mockOnRerun} />,
+    );
+    expect(container.querySelector('.exit-success')).not.toBeInTheDocument();
+    expect(container.querySelector('.exit-failure')).not.toBeInTheDocument();
+  });
 });

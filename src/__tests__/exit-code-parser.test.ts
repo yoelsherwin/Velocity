@@ -1,0 +1,69 @@
+import { describe, it, expect } from 'vitest';
+import { extractExitCode, getExitCodeMarker } from '../lib/exit-code-parser';
+
+describe('extractExitCode', () => {
+  it('test_extracts_exit_code_zero', () => {
+    const result = extractExitCode('output\nVELOCITY_EXIT:0\n');
+    expect(result.exitCode).toBe(0);
+    expect(result.cleanOutput).toBe('output\n');
+  });
+
+  it('test_extracts_nonzero_exit_code', () => {
+    const result = extractExitCode('error\nVELOCITY_EXIT:1\n');
+    expect(result.exitCode).toBe(1);
+    expect(result.cleanOutput).toBe('error\n');
+  });
+
+  it('test_extracts_negative_exit_code', () => {
+    const result = extractExitCode('VELOCITY_EXIT:-1\n');
+    expect(result.exitCode).toBe(-1);
+    expect(result.cleanOutput).toBe('');
+  });
+
+  it('test_no_marker_returns_null', () => {
+    const result = extractExitCode('just output');
+    expect(result.exitCode).toBeNull();
+    expect(result.cleanOutput).toBe('just output');
+  });
+
+  it('test_strips_marker_from_output', () => {
+    const input = 'line1\nline2\nVELOCITY_EXIT:0\n';
+    const result = extractExitCode(input);
+    expect(result.cleanOutput).toBe('line1\nline2\n');
+    expect(result.cleanOutput).not.toContain('VELOCITY_EXIT');
+  });
+
+  it('test_handles_carriage_return_newline', () => {
+    const result = extractExitCode('output\r\nVELOCITY_EXIT:0\r\n');
+    expect(result.exitCode).toBe(0);
+    expect(result.cleanOutput).not.toContain('VELOCITY_EXIT');
+  });
+
+  it('test_extracts_large_exit_code', () => {
+    const result = extractExitCode('VELOCITY_EXIT:255\n');
+    expect(result.exitCode).toBe(255);
+  });
+
+  it('test_handles_marker_without_trailing_newline', () => {
+    const result = extractExitCode('output\nVELOCITY_EXIT:0');
+    expect(result.exitCode).toBe(0);
+    expect(result.cleanOutput).toBe('output\n');
+  });
+});
+
+describe('getExitCodeMarker', () => {
+  it('test_powershell_marker', () => {
+    const marker = getExitCodeMarker('powershell');
+    expect(marker).toBe('; Write-Output "VELOCITY_EXIT:$LASTEXITCODE"');
+  });
+
+  it('test_cmd_marker', () => {
+    const marker = getExitCodeMarker('cmd');
+    expect(marker).toBe('& echo VELOCITY_EXIT:%ERRORLEVEL%');
+  });
+
+  it('test_wsl_marker', () => {
+    const marker = getExitCodeMarker('wsl');
+    expect(marker).toBe('; echo "VELOCITY_EXIT:$?"');
+  });
+});

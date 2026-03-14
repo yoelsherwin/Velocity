@@ -49,7 +49,14 @@ function BlockView({ block, isActive, onRerun }: BlockViewProps) {
               {block.command}
             </span>
           </div>
-          <span className="block-timestamp">{formattedTime}</span>
+          <div className="block-header-right">
+            {block.exitCode !== undefined && block.exitCode !== null && (
+              <span className={`block-exit-code ${block.exitCode === 0 ? 'exit-success' : 'exit-failure'}`}>
+                {block.exitCode === 0 ? '\u2713' : `\u2717 ${block.exitCode}`}
+              </span>
+            )}
+            <span className="block-timestamp">{formattedTime}</span>
+          </div>
         </div>
       )}
       {block.output && (

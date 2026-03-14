@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { createSession, writeToSession, closeSession, startReading } from '../lib/pty';
 import { SHELL_TYPES, ShellType, Block } from '../lib/types';
+import { extractExitCode, getExitCodeMarker } from '../lib/exit-code-parser';
 import BlockView from './blocks/BlockView';
 import InputEditor from './editor/InputEditor';
 import { useCommandHistory } from '../hooks/useCommandHistory';
@@ -88,11 +89,16 @@ function Terminal() {
           `pty:output:${sid}`,
           (event) => {
             setBlocks((prev) =>
-              prev.map((b) =>
-                b.id === activeBlockIdRef.current
-                  ? { ...b, output: b.output + event.payload }
-                  : b,
-              ),
+              prev.map((b) => {
+                if (b.id !== activeBlockIdRef.current) return b;
+                const newOutput = b.output + event.payload;
+                const { cleanOutput, exitCode } = extractExitCode(newOutput);
+                return {
+                  ...b,
+                  output: cleanOutput,
+                  ...(exitCode !== null ? { exitCode, status: 'completed' as const } : {}),
+                };
+              }),
             );
           },
         );
@@ -240,7 +246,8 @@ function Terminal() {
           : withNew;
       });
       activeBlockIdRef.current = newBlock.id;
-      writeToSession(sessionIdRef.current, command.replace(/\n/g, '\r') + '\r').catch((err) => {
+      const markerSuffix = getExitCodeMarker(shellType);
+      writeToSession(sessionIdRef.current, command.replace(/\n/g, '\r') + markerSuffix + '\r').catch((err) => {
         setBlocks((prev) =>
           prev.map((b) =>
             b.id === newBlock.id

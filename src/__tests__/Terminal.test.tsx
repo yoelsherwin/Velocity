@@ -87,7 +87,7 @@ describe('Terminal Component', () => {
     await waitFor(() => {
       expect(mockWriteToSession).toHaveBeenCalledWith(
         'test-session-id',
-        'echo hello\r',
+        'echo hello; Write-Output "VELOCITY_EXIT:$LASTEXITCODE"\r',
       );
     });
   });
@@ -107,7 +107,7 @@ describe('Terminal Component', () => {
     await waitFor(() => {
       expect(mockWriteToSession).toHaveBeenCalledWith(
         'test-session-id',
-        'line1\rline2\rline3\r',
+        'line1\rline2\rline3; Write-Output "VELOCITY_EXIT:$LASTEXITCODE"\r',
       );
     });
   });
@@ -453,7 +453,7 @@ describe('Terminal Component', () => {
     await waitFor(() => {
       expect(mockWriteToSession).toHaveBeenCalledWith(
         'test-session-id',
-        'echo first\r',
+        'echo first; Write-Output "VELOCITY_EXIT:$LASTEXITCODE"\r',
       );
     });
 
@@ -464,7 +464,7 @@ describe('Terminal Component', () => {
     await waitFor(() => {
       expect(mockWriteToSession).toHaveBeenCalledWith(
         'test-session-id',
-        'echo second\r',
+        'echo second; Write-Output "VELOCITY_EXIT:$LASTEXITCODE"\r',
       );
     });
 
@@ -478,6 +478,77 @@ describe('Terminal Component', () => {
     fireEvent.keyDown(textarea, { key: 'ArrowUp' });
     await waitFor(() => {
       expect(textarea.value).toBe('echo first');
+    });
+  });
+
+  // --- Task 012: Exit code marker injection tests ---
+
+  it('test_exit_marker_appended_to_command', async () => {
+    render(<Terminal />);
+
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    const textarea = screen.getByTestId('editor-textarea');
+    fireEvent.change(textarea, { target: { value: 'dir' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(mockWriteToSession).toHaveBeenCalledWith(
+        'test-session-id',
+        expect.stringContaining('VELOCITY_EXIT'),
+      );
+    });
+  });
+
+  it('test_exit_marker_uses_powershell_syntax_by_default', async () => {
+    render(<Terminal />);
+
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    const textarea = screen.getByTestId('editor-textarea');
+    fireEvent.change(textarea, { target: { value: 'dir' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(mockWriteToSession).toHaveBeenCalledWith(
+        'test-session-id',
+        'dir; Write-Output "VELOCITY_EXIT:$LASTEXITCODE"\r',
+      );
+    });
+  });
+
+  it('test_exit_code_parsed_from_output_and_block_completed', async () => {
+    render(<Terminal />);
+
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    // Submit a command to create a new block
+    const textarea = screen.getByTestId('editor-textarea');
+    fireEvent.change(textarea, { target: { value: 'dir' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(mockWriteToSession).toHaveBeenCalled();
+    });
+
+    // Simulate output with exit marker
+    await act(async () => {
+      const outputCallback = eventListeners['pty:output:test-session-id'];
+      if (outputCallback) {
+        outputCallback({ payload: 'file1.txt\nVELOCITY_EXIT:0\n' });
+      }
+    });
+
+    // The marker should be stripped from the displayed output
+    await waitFor(() => {
+      const output = screen.getByTestId('terminal-output');
+      expect(output.textContent).not.toContain('VELOCITY_EXIT');
     });
   });
 
