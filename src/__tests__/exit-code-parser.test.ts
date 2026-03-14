@@ -63,6 +63,34 @@ describe('extractExitCode', () => {
     expect(result.cleanOutput).not.toContain('VELOCITY_EXIT');
     expect(result.cleanOutput).toBe('output\nmore\n');
   });
+
+  it('test_detects_marker_wrapped_in_sgr_reset', () => {
+    // ConPTY may wrap the marker line in SGR reset sequences
+    const result = extractExitCode('output\n\x1b[0mVELOCITY_EXIT:1\x1b[0m\n');
+    expect(result.exitCode).toBe(1);
+    expect(result.cleanOutput).not.toContain('VELOCITY_EXIT');
+  });
+
+  it('test_detects_marker_with_sgr_before_line', () => {
+    // SGR code at the very start of the marker line
+    const result = extractExitCode('output\n\x1b[0mVELOCITY_EXIT:0\n');
+    expect(result.exitCode).toBe(0);
+    expect(result.cleanOutput).toBe('output\n');
+  });
+
+  it('test_detects_marker_with_multiple_sgr_sequences', () => {
+    // Multiple SGR codes interspersed
+    const result = extractExitCode('error\n\x1b[31m\x1b[0mVELOCITY_EXIT:2\x1b[0m\r\n');
+    expect(result.exitCode).toBe(2);
+    expect(result.cleanOutput).not.toContain('VELOCITY_EXIT');
+  });
+
+  it('test_preserves_sgr_in_non_marker_output', () => {
+    // SGR codes in normal output should be preserved
+    const result = extractExitCode('\x1b[31mred text\x1b[0m\nVELOCITY_EXIT:0\n');
+    expect(result.exitCode).toBe(0);
+    expect(result.cleanOutput).toBe('\x1b[31mred text\x1b[0m\n');
+  });
 });
 
 describe('getExitCodeMarker', () => {

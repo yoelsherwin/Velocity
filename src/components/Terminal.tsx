@@ -246,7 +246,11 @@ function Terminal() {
           : withNew;
       });
       activeBlockIdRef.current = newBlock.id;
-      const markerSuffix = getExitCodeMarker(shellType);
+      // Skip the exit-code marker for commands that kill the shell (e.g. "exit").
+      // The marker suffix would never execute and its echoed text clutters the output.
+      const trimmedLower = command.trim().toLowerCase();
+      const isExitCommand = trimmedLower === 'exit' || trimmedLower.startsWith('exit ');
+      const markerSuffix = isExitCommand ? '' : getExitCodeMarker(shellType);
       writeToSession(sessionIdRef.current, command.replace(/\n/g, '\r') + markerSuffix + '\r').catch((err) => {
         setBlocks((prev) =>
           prev.map((b) =>

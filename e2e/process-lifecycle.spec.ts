@@ -12,8 +12,10 @@ test.describe('Process lifecycle', () => {
     await textarea.fill('exit');
     await textarea.press('Enter');
 
-    // Wait for the "[Process exited]" message to appear
-    await expect(output).toContainText('[Process exited]', {
+    // Wait for the "[Process exited]" message to appear.
+    // Use CSS class selector for robustness — the div is rendered inside
+    // terminal-output when the PTY fires the `closed` event.
+    await expect(appPage.locator('.block-process-exited')).toBeVisible({
       timeout: 15_000,
     });
 
