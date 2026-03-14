@@ -6,6 +6,12 @@ export interface SessionInfo {
   shellType: ShellType;
 }
 
+export interface Tab {
+  id: string;
+  title: string;       // Display name (e.g., "Terminal 1", "Terminal 2")
+  shellType: ShellType; // Initial shell type for this tab
+}
+
 export interface Block {
   id: string;
   command: string;          // The command text the user typed (empty for initial/welcome block)

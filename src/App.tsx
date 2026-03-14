@@ -1,10 +1,10 @@
 import "./App.css";
-import Terminal from "./components/Terminal";
+import TabManager from "./components/layout/TabManager";
 
 function App() {
   return (
     <main className="container">
-      <Terminal />
+      <TabManager />
     </main>
   );
 }
