@@ -1,14 +1,14 @@
 # Velocity Project State
 
 > Last updated by CTO session: `41746083-3b91-4ff2-83f8-b09d0c659fc1`
-> Last updated at: `2026-03-12`
+> Last updated at: `2026-03-13`
 
 ## Current Phase
-Feature development — Pillars 1-2 complete + full testing infrastructure. Ready for Pillar 3.
+Feature development — Pillars 1-3 complete. Ready for Pillar 4.
 
 ## Backlog Position
-Pillar: 3 (Decoupled Input Editor)
-Next task number: 008
+Pillar: 4 (Structural Layout — Tabs & Panes)
+Next task number: 009
 
 ## Completed Tasks
 
@@ -20,20 +20,20 @@ Next task number: 008
 | TASK-004 | Process lifecycle + shell selection | `85c34dd` | APPROVED R2 | PASS R1 | PASS R2 |
 | TASK-005 | Block model — command/output containers | `6db813d` | APPROVED R2 | PASS R1 | PASS R3 |
 | TASK-006 | PTY channel refactor + integration tests | `9ccbc42` | APPROVED R1 | N/A | N/A |
-| TASK-007 | E2E tests with Playwright | `37dda08` | — | N/A | N/A |
-| FIX-006 | camelCase IPC keys | `1d7edf9` | — | — | — |
-| FIX-007 | StrictMode double-mount race | `7ae29d7` | — | — | — |
-| FIX-008 | Lazy reader thread start | committed | — | — | — |
-| FIX-009 | ConPTY cursor position response | `1acbb98` | — | — | — |
+| TASK-007 | E2E tests with Playwright | `37dda08` | N/A | N/A | N/A |
+| TASK-008 | Input editor — multi-line + syntax highlighting | `e1afb70` | APPROVED R2 | N/A (frontend) | PASS |
 
 ## In Progress
-TASK-008: Decoupled Input Editor — Multi-line + Syntax Highlighting
+None.
 
 ## Outstanding Issues
 - **BUG-025 (Medium)**: No per-block output size limit.
 - **BUG-020 (Medium)**: Welcome block retains `running` status after session close.
 - **BUG-009 (Medium)**: Rapid shell switching race creates orphaned sessions.
 - **BUG-004 (Medium)**: Full ANSI re-parse per PTY event (perf).
+- **BUG-028 (Low)**: Tokenizer misclassifies flag-like filenames after redirects.
+- **BUG-029 (Low)**: Tokenizer doesn't recognize `;`, `&&`, `||` as command separators.
+- **BUG-031 (Low)**: Overlay scroll desync on very long content.
 
 ## Pillar Status
 
@@ -41,27 +41,28 @@ TASK-008: Decoupled Input Editor — Multi-line + Syntax Highlighting
 |--------|--------|-------|
 | 1. Process Interfacing | **COMPLETE** | PTY, streaming, ANSI filter, lifecycle, shells, ConPTY fix |
 | 2. Block Model | **COMPLETE** (MVP) | Blocks, copy/rerun. Exit codes deferred. |
-| Testing Infrastructure | **COMPLETE** | Layer 1 (9 integration), Layer 3 (7 E2E), 43 unit |
-| 3. Input Editor | Not started | Next up |
-| 4. Layout (Tabs/Panes) | Not started | |
+| 3. Input Editor | **COMPLETE** (3a+3b) | Multi-line, syntax highlighting. Ghost text (3c) deferred. |
+| Testing Infrastructure | **COMPLETE** | 9 integration + 8 E2E + 65 unit tests |
+| 4. Layout (Tabs/Panes) | Not started | Next up |
 | 5. Agent Mode | Not started | |
 
 ## Test Summary
 
 | Layer | Suite | Count |
 |-------|-------|-------|
-| Unit | Vitest (frontend) | 43 |
+| Unit | Vitest (frontend) | 65 |
 | Unit | cargo test (Rust) | 35 (+1 ignored) |
 | Integration | Rust PTY (real PowerShell) | 9 |
-| E2E | Playwright (real app + CDP) | 7 |
-| **Total** | | **94** |
+| E2E | Playwright (real app + CDP) | 8 |
+| **Total** | | **117** |
 
 ## Last Security Review
 - Scope: TASK-005 (block model)
 - HEAD at review: `5e6afb6`
 
 ## Notes
-- E2E uses Playwright + CDP to WebView2 (`WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222`)
-- E2E fixture manages Vite dev server (worker-scoped) + Tauri app (test-scoped)
-- `workers: 1` in Playwright config (serial, shared CDP port)
-- `vitest.config.ts` excludes `e2e/**` to avoid Vitest/Playwright conflict
+- Pillar 3 sub-tasks 3a (multi-line) and 3b (syntax highlighting) complete.
+- 3c (ghost text suggestions) and 3d (keyboard shortcuts) deferred — can add later.
+- Shell tokenizer handles: commands, flags, strings (including unclosed), pipes, redirects.
+- Input editor uses textarea + pre overlay with CSS Grid alignment.
+- Multi-line commands convert `\n` → `\r` before sending to PTY.
