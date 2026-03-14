@@ -21,6 +21,14 @@ export function stripAnsi(text: string): string {
 }
 
 /**
+ * Validate that a color string is a safe RGB triplet (e.g. "255, 0, 128").
+ * Prevents injection of arbitrary CSS values from untrusted ANSI output.
+ */
+export function isValidRgb(value: string): boolean {
+  return /^\d{1,3},\s?\d{1,3},\s?\d{1,3}$/.test(value);
+}
+
+/**
  * Parse ANSI-escaped text into styled spans.
  * Input should already be security-filtered by the Rust backend
  * (only SGR sequences remain).
@@ -31,10 +39,10 @@ export function parseAnsi(text: string): AnsiSpan[] {
       const span: AnsiSpan = {
         content: entry.content,
       };
-      if (entry.fg) {
+      if (entry.fg && isValidRgb(entry.fg)) {
         span.fg = `rgb(${entry.fg})`;
       }
-      if (entry.bg) {
+      if (entry.bg && isValidRgb(entry.bg)) {
         span.bg = `rgb(${entry.bg})`;
       }
       const decorations: string[] = entry.decorations || [];

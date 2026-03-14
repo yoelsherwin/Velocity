@@ -1,5 +1,23 @@
 import { describe, it, expect } from 'vitest';
-import { parseAnsi } from '../lib/ansi';
+import { parseAnsi, isValidRgb } from '../lib/ansi';
+
+describe('isValidRgb', () => {
+  it('test_isValidRgb_accepts_valid', () => {
+    expect(isValidRgb('255, 0, 128')).toBe(true);
+    expect(isValidRgb('0,0,0')).toBe(true);
+    expect(isValidRgb('255,255,255')).toBe(true);
+    expect(isValidRgb('128, 64, 32')).toBe(true);
+  });
+
+  it('test_isValidRgb_rejects_invalid', () => {
+    expect(isValidRgb('url(evil)')).toBe(false);
+    expect(isValidRgb('')).toBe(false);
+    expect(isValidRgb('red')).toBe(false);
+    expect(isValidRgb('255, 0')).toBe(false);
+    expect(isValidRgb('expression(alert(1))')).toBe(false);
+    expect(isValidRgb('1,2,3,4')).toBe(false);
+  });
+});
 
 describe('parseAnsi', () => {
   it('test_parseAnsi_plain_text', () => {

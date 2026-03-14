@@ -157,6 +157,7 @@ function Terminal() {
         errorBlock.status = 'completed';
         activeBlockIdRef.current = errorBlock.id;
         setBlocks([errorBlock]);
+        setClosed(true);
       }
     },
     [updateSessionId, cleanupListeners],
@@ -167,10 +168,10 @@ function Terminal() {
       // Increment counter to cancel any in-flight startSession
       startSessionIdRef.current++;
 
+      cleanupListeners(); // Stop listening FIRST to prevent stale events during async gap
       if (sessionIdRef.current) {
         await closeSession(sessionIdRef.current).catch(() => {});
       }
-      cleanupListeners();
       setBlocks([]);
       activeBlockIdRef.current = null;
       setInput('');
@@ -300,7 +301,7 @@ function Terminal() {
           <InputEditor
             value={input}
             onChange={setInput}
-            onSubmit={(cmd) => { submitCommand(cmd); setInput(''); }}
+            onSubmit={(cmd) => { const trimmed = cmd.trim(); if (trimmed) { submitCommand(trimmed); } setInput(''); }}
             disabled={closed}
           />
         </div>

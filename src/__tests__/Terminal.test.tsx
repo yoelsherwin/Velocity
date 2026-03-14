@@ -355,6 +355,31 @@ describe('Terminal Component', () => {
     expect(MAX_BLOCKS).toBe(50);
   });
 
+  // --- FIX-011: Empty input should not submit a command ---
+
+  it('test_empty_input_not_submitted', async () => {
+    render(<Terminal />);
+
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    const textarea = screen.getByTestId('editor-textarea');
+
+    // Press Enter with empty input
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    // writeToSession should NOT have been called
+    expect(mockWriteToSession).not.toHaveBeenCalled();
+
+    // Also test whitespace-only input
+    fireEvent.change(textarea, { target: { value: '   ' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    // writeToSession should still NOT have been called
+    expect(mockWriteToSession).not.toHaveBeenCalled();
+  });
+
   // --- FIX-008: startReading called after listeners registered ---
 
   it('test_startReading_called_after_listeners_registered', async () => {

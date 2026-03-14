@@ -33,6 +33,4 @@ npm-debug.log*
 # Local config
 *.local
 
-nul
-
 .claude/settings.local.json

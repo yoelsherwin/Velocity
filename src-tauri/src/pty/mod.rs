@@ -25,6 +25,13 @@ pub enum PtyEvent {
     Closed,
 }
 
+pub fn validate_session_id(session_id: &str) -> Result<(), String> {
+    if Uuid::parse_str(session_id).is_err() {
+        return Err(format!("Invalid session ID format: {}", session_id));
+    }
+    Ok(())
+}
+
 pub fn validate_dimensions(rows: u16, cols: u16) -> Result<(), String> {
     if rows < 1 || rows > 500 {
         return Err(format!("Invalid rows: {}. Must be between 1 and 500.", rows));
@@ -82,19 +89,23 @@ fn spawn_reader_thread(
             match reader.read(&mut buf) {
                 Ok(0) => break,
                 Ok(n) => {
-                    eprintln!(
-                        "[pty:{}] raw read: {} bytes, hex: {:02x?}",
-                        session_id,
-                        n,
-                        &buf[..n.min(64)]
-                    );
+                    if cfg!(debug_assertions) {
+                        eprintln!(
+                            "[pty:{}] raw read: {} bytes, hex: {:02x?}",
+                            session_id,
+                            n,
+                            &buf[..n.min(64)]
+                        );
+                    }
                     let output = ansi_filter.filter(&buf[..n]);
-                    eprintln!(
-                        "[pty:{}] filtered: {} bytes, empty={}",
-                        session_id,
-                        output.len(),
-                        output.is_empty()
-                    );
+                    if cfg!(debug_assertions) {
+                        eprintln!(
+                            "[pty:{}] filtered: {} bytes, empty={}",
+                            session_id,
+                            output.len(),
+                            output.is_empty()
+                        );
+                    }
                     if tx.send(PtyEvent::Output(output)).is_err() {
                         break;
                     }
@@ -283,6 +294,7 @@ impl SessionManager {
         session_id: &str,
         app_handle: AppHandle,
     ) -> Result<(), String> {
+        validate_session_id(session_id)?;
         let session = self
             .sessions
             .get_mut(session_id)
@@ -342,6 +354,7 @@ impl SessionManager {
     }
 
     pub fn write_to_session(&mut self, session_id: &str, data: &str) -> Result<(), String> {
+        validate_session_id(session_id)?;
         let session = self
             .sessions
             .get_mut(session_id)
@@ -361,6 +374,7 @@ impl SessionManager {
     }
 
     pub fn resize_session(&mut self, session_id: &str, rows: u16, cols: u16) -> Result<(), String> {
+        validate_session_id(session_id)?;
         validate_dimensions(rows, cols)?;
 
         let session = self
@@ -382,6 +396,7 @@ impl SessionManager {
     }
 
     pub fn close_session(&mut self, session_id: &str) -> Result<(), String> {
+        validate_session_id(session_id)?;
         let mut session = self
             .sessions
             .remove(session_id)
@@ -436,7 +451,9 @@ mod tests {
     #[test]
     fn test_close_nonexistent_session_returns_error() {
         let mut manager = SessionManager::new();
-        let result = manager.close_session("nonexistent-id");
+        // Use a valid UUID format that doesn't exist in the session map
+        let fake_uuid = Uuid::new_v4().to_string();
+        let result = manager.close_session(&fake_uuid);
         assert!(result.is_err());
         let err = result.unwrap_err().to_lowercase();
         assert!(
@@ -449,7 +466,8 @@ mod tests {
     #[test]
     fn test_write_to_nonexistent_session_returns_error() {
         let mut manager = SessionManager::new();
-        let result = manager.write_to_session("nonexistent-id", "hello");
+        let fake_uuid = Uuid::new_v4().to_string();
+        let result = manager.write_to_session(&fake_uuid, "hello");
         assert!(result.is_err());
         let err = result.unwrap_err().to_lowercase();
         assert!(
@@ -462,7 +480,8 @@ mod tests {
     #[test]
     fn test_resize_nonexistent_session_returns_error() {
         let mut manager = SessionManager::new();
-        let result = manager.resize_session("nonexistent-id", 24, 80);
+        let fake_uuid = Uuid::new_v4().to_string();
+        let result = manager.resize_session(&fake_uuid, 24, 80);
         assert!(result.is_err());
         let err = result.unwrap_err().to_lowercase();
         assert!(
@@ -568,6 +587,17 @@ mod tests {
         let result = validate_dimensions(24, 501);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Invalid cols"));
+    }
+
+    #[test]
+    fn test_session_id_validation_rejects_invalid() {
+        assert!(validate_session_id("not-a-uuid").is_err());
+        assert!(validate_session_id("").is_err());
+        assert!(validate_session_id("12345").is_err());
+        assert!(validate_session_id("rm -rf /").is_err());
+        // Valid UUID should pass
+        let valid_uuid = Uuid::new_v4().to_string();
+        assert!(validate_session_id(&valid_uuid).is_ok());
     }
 
     #[test]
