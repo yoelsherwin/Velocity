@@ -14,6 +14,12 @@ function TabManager() {
     return [initialTab];
   });
   const [activeTabId, setActiveTabId] = useState<string>(() => tabs[0].id);
+  const activeTabIdRef = useRef(activeTabId);
+
+  const updateActiveTabId = useCallback((id: string) => {
+    activeTabIdRef.current = id;
+    setActiveTabId(id);
+  }, []);
 
   const handleNewTab = useCallback(() => {
     tabCounterRef.current += 1;
@@ -23,8 +29,8 @@ function TabManager() {
       shellType: 'powershell',
     };
     setTabs((prev) => [...prev, newTab]);
-    setActiveTabId(newTab.id);
-  }, []);
+    updateActiveTabId(newTab.id);
+  }, [updateActiveTabId]);
 
   const handleCloseTab = useCallback(
     (tabId: string) => {
@@ -35,16 +41,16 @@ function TabManager() {
         const newTabs = prev.filter((t) => t.id !== tabId);
 
         // If closing the active tab, switch to an adjacent tab
-        if (tabId === activeTabId) {
+        if (tabId === activeTabIdRef.current) {
           // Prefer the previous tab; if closing the first, go to next
           const newActiveIndex = index > 0 ? index - 1 : 0;
-          setActiveTabId(newTabs[newActiveIndex].id);
+          updateActiveTabId(newTabs[newActiveIndex].id);
         }
 
         return newTabs;
       });
     },
-    [activeTabId],
+    [updateActiveTabId],
   );
 
   // Global keyboard shortcuts
@@ -56,20 +62,20 @@ function TabManager() {
       }
       if (e.ctrlKey && e.key === 'w') {
         e.preventDefault();
-        handleCloseTab(activeTabId);
+        handleCloseTab(activeTabIdRef.current);
       }
     };
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [handleNewTab, handleCloseTab, activeTabId]);
+  }, [handleNewTab, handleCloseTab]);
 
   return (
     <div className="tab-manager">
       <TabBar
         tabs={tabs}
         activeTabId={activeTabId}
-        onSelectTab={setActiveTabId}
+        onSelectTab={updateActiveTabId}
         onCloseTab={handleCloseTab}
         onNewTab={handleNewTab}
       />

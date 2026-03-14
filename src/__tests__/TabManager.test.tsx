@@ -159,4 +159,34 @@ describe('TabManager', () => {
     const tabButtons = screen.getAllByTestId(/^tab-button-/);
     expect(tabButtons).toHaveLength(2);
   });
+
+  it('test_ctrl_w_closes_active_tab', async () => {
+    render(<TabManager />);
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    // Create a second tab via Ctrl+T
+    await act(async () => {
+      fireEvent.keyDown(document, { key: 't', ctrlKey: true });
+    });
+
+    let tabButtons = screen.getAllByTestId(/^tab-button-/);
+    expect(tabButtons).toHaveLength(2);
+
+    // The second tab should be active
+    expect(tabButtons[1]).toHaveClass('tab-button-active');
+
+    // Press Ctrl+W to close the active tab
+    await act(async () => {
+      fireEvent.keyDown(document, { key: 'w', ctrlKey: true });
+    });
+
+    // Should have only 1 tab remaining
+    tabButtons = screen.getAllByTestId(/^tab-button-/);
+    expect(tabButtons).toHaveLength(1);
+
+    // The remaining tab should be active
+    expect(tabButtons[0]).toHaveClass('tab-button-active');
+  });
 });
