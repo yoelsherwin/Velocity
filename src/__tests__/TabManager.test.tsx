@@ -380,4 +380,149 @@ describe('TabManager', () => {
     // Terminal output area should still exist (tab 1 content preserved)
     expect(screen.getByTestId('terminal-output')).toBeInTheDocument();
   });
+
+  // --- Task 014: Per-tab pane focus tests ---
+
+  it('test_focus_preserved_across_tab_switch', async () => {
+    render(<TabManager />);
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    // Split the pane in tab 1 so it has 2 panes
+    await act(async () => {
+      fireEvent.keyDown(document, {
+        key: 'ArrowRight',
+        ctrlKey: true,
+        shiftKey: true,
+      });
+    });
+
+    await waitFor(() => {
+      const terminals = screen.getAllByTestId('terminal-output');
+      expect(terminals).toHaveLength(2);
+    });
+
+    // Get the pane IDs in tab 1; the second pane (new one from split) should be focused
+    // after the split auto-focus behavior
+    const tab1Panes = document.querySelectorAll('[data-testid^="pane-"]');
+    expect(tab1Panes).toHaveLength(2);
+
+    // Click the second pane to ensure it's focused in tab 1
+    await act(async () => {
+      fireEvent.click(tab1Panes[1]);
+    });
+
+    // Verify the second pane has the focused class
+    expect(tab1Panes[1]).toHaveClass('pane-focused');
+    expect(tab1Panes[0]).not.toHaveClass('pane-focused');
+
+    // Create tab 2 and switch to it
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('tab-new-button'));
+    });
+
+    // Tab 2 is now active; switch back to tab 1
+    const tabButtons = screen.getAllByTestId(/^tab-button-/);
+    await act(async () => {
+      fireEvent.click(tabButtons[0]);
+    });
+
+    // After switching back to tab 1, pane 2 should still be focused
+    const tab1PanesAfter = document.querySelectorAll(
+      `[data-testid^="tab-panel-"]:not([style*="display: none"]) [data-testid^="pane-"]`,
+    );
+    // Find the pane that has the focused class
+    const focusedPane = document.querySelector(
+      `[data-testid^="tab-panel-"]:not([style*="display: none"]) .pane-focused`,
+    );
+    expect(focusedPane).not.toBeNull();
+    // The focused pane should be the second pane (same one we clicked before switching)
+    expect(focusedPane?.getAttribute('data-testid')).toBe(
+      tab1Panes[1].getAttribute('data-testid'),
+    );
+  });
+
+  it('test_split_focuses_new_pane', async () => {
+    render(<TabManager />);
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    // Get the initial pane ID
+    const initialPane = document.querySelector('[data-testid^="pane-"]');
+    expect(initialPane).not.toBeNull();
+    const initialPaneTestId = initialPane!.getAttribute('data-testid');
+
+    // Split the pane
+    await act(async () => {
+      fireEvent.keyDown(document, {
+        key: 'ArrowRight',
+        ctrlKey: true,
+        shiftKey: true,
+      });
+    });
+
+    // Wait for the split to render
+    await waitFor(() => {
+      const terminals = screen.getAllByTestId('terminal-output');
+      expect(terminals).toHaveLength(2);
+    });
+
+    // The NEW pane (not the original) should be focused
+    const focusedPane = document.querySelector('.pane-focused');
+    expect(focusedPane).not.toBeNull();
+    // The focused pane should NOT be the original pane
+    expect(focusedPane!.getAttribute('data-testid')).not.toBe(initialPaneTestId);
+  });
+
+  it('test_close_pane_focuses_sibling', async () => {
+    render(<TabManager />);
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    // Split the pane to have 2 panes
+    await act(async () => {
+      fireEvent.keyDown(document, {
+        key: 'ArrowRight',
+        ctrlKey: true,
+        shiftKey: true,
+      });
+    });
+
+    await waitFor(() => {
+      const terminals = screen.getAllByTestId('terminal-output');
+      expect(terminals).toHaveLength(2);
+    });
+
+    // Get the pane that is NOT focused (the sibling/original pane)
+    const allPanes = document.querySelectorAll('[data-testid^="pane-"]');
+    expect(allPanes).toHaveLength(2);
+
+    const unfocusedPane = document.querySelector('[data-testid^="pane-"]:not(.pane-focused)');
+    expect(unfocusedPane).not.toBeNull();
+    const siblingTestId = unfocusedPane!.getAttribute('data-testid');
+
+    // Close the focused pane with Ctrl+Shift+W
+    await act(async () => {
+      fireEvent.keyDown(document, {
+        key: 'W',
+        ctrlKey: true,
+        shiftKey: true,
+      });
+    });
+
+    // Should be back to 1 pane
+    await waitFor(() => {
+      const terminals = screen.getAllByTestId('terminal-output');
+      expect(terminals).toHaveLength(1);
+    });
+
+    // The remaining pane should be the sibling and it should be focused
+    const remainingPane = document.querySelector('[data-testid^="pane-"]');
+    expect(remainingPane).not.toBeNull();
+    expect(remainingPane!.getAttribute('data-testid')).toBe(siblingTestId);
+    expect(remainingPane).toHaveClass('pane-focused');
+  });
 });
