@@ -4,6 +4,8 @@ import { splitPane, closePane, countLeaves, getLeafIds } from '../../lib/pane-ut
 import TabBar from './TabBar';
 import PaneContainer from './PaneContainer';
 
+const MAX_PANES_TOTAL = 20;
+
 function TabManager() {
   const tabCounterRef = useRef(1);
   const [tabs, setTabs] = useState<Tab[]>(() => {
@@ -16,6 +18,7 @@ function TabManager() {
     };
     return [initialTab];
   });
+  const tabsRef = useRef(tabs);
   const [activeTabId, setActiveTabId] = useState<string>(() => tabs[0].id);
   const activeTabIdRef = useRef(activeTabId);
   const [focusedPaneId, setFocusedPaneId] = useState<string | null>(() => {
@@ -23,6 +26,11 @@ function TabManager() {
     return firstTab.paneRoot.type === 'leaf' ? firstTab.paneRoot.id : null;
   });
   const focusedPaneIdRef = useRef(focusedPaneId);
+
+  // Keep tabsRef in sync with tabs state
+  useEffect(() => {
+    tabsRef.current = tabs;
+  }, [tabs]);
 
   const updateActiveTabId = useCallback((id: string) => {
     activeTabIdRef.current = id;
@@ -82,13 +90,17 @@ function TabManager() {
 
   const handleSplitPane = useCallback(
     (tabId: string, paneId: string, direction: PaneDirection) => {
-      setTabs((prev) =>
-        prev.map((tab) => {
+      setTabs((prev) => {
+        // Guard: check total pane count across ALL tabs against the limit
+        const totalPanes = prev.reduce((sum, t) => sum + countLeaves(t.paneRoot), 0);
+        if (totalPanes >= MAX_PANES_TOTAL) return prev;
+
+        return prev.map((tab) => {
           if (tab.id !== tabId) return tab;
           const newRoot = splitPane(tab.paneRoot, paneId, direction);
           return { ...tab, paneRoot: newRoot };
-        }),
-      );
+        });
+      });
       // Focus stays on the original pane after split
     },
     [],
@@ -123,15 +135,12 @@ function TabManager() {
   const handleSelectTab = useCallback(
     (tabId: string) => {
       updateActiveTabId(tabId);
-      // Find the new tab and focus its first pane
-      setTabs((prev) => {
-        const tab = prev.find((t) => t.id === tabId);
-        if (tab) {
-          const leafIds = getLeafIds(tab.paneRoot);
-          updateFocusedPaneId(leafIds.length > 0 ? leafIds[0] : null);
-        }
-        return prev; // No mutation needed
-      });
+      // Read current tabs from the ref instead of abusing setTabs as a reader
+      const tab = tabsRef.current.find((t) => t.id === tabId);
+      if (tab) {
+        const leafIds = getLeafIds(tab.paneRoot);
+        updateFocusedPaneId(leafIds.length > 0 ? leafIds[0] : null);
+      }
     },
     [updateActiveTabId, updateFocusedPaneId],
   );
@@ -159,11 +168,8 @@ function TabManager() {
           handleSplitPane(activeTabIdRef.current, focusedPaneIdRef.current, 'horizontal');
         }
       }
-      // Ctrl+Shift+Down or Ctrl+-: Split focused pane vertically
-      if (
-        (e.ctrlKey && e.shiftKey && e.key === 'ArrowDown') ||
-        (e.ctrlKey && e.key === '-')
-      ) {
+      // Ctrl+Shift+Down: Split focused pane vertically
+      if (e.ctrlKey && e.shiftKey && e.key === 'ArrowDown') {
         e.preventDefault();
         if (focusedPaneIdRef.current) {
           handleSplitPane(activeTabIdRef.current, focusedPaneIdRef.current, 'vertical');

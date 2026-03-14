@@ -25,7 +25,7 @@ function PaneContainer({
         onClick={() => onFocusPane(node.id)}
         data-testid={`pane-${node.id}`}
       >
-        <Terminal />
+        <Terminal key={node.id} />
         <div className="pane-actions">
           <button
             className="pane-action-btn"

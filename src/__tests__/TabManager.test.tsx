@@ -294,6 +294,36 @@ describe('TabManager', () => {
     });
   });
 
+  it('test_ctrl_shift_down_splits_vertically', async () => {
+    render(<TabManager />);
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    // Should start with 1 terminal
+    let terminals = screen.getAllByTestId('terminal-output');
+    expect(terminals).toHaveLength(1);
+
+    // Press Ctrl+Shift+Down to split the pane vertically
+    await act(async () => {
+      fireEvent.keyDown(document, {
+        key: 'ArrowDown',
+        ctrlKey: true,
+        shiftKey: true,
+      });
+    });
+
+    // Should now have 2 terminal output areas in a vertical split
+    await waitFor(() => {
+      terminals = screen.getAllByTestId('terminal-output');
+      expect(terminals).toHaveLength(2);
+    });
+
+    // Verify it created a vertical split container
+    const verticalSplit = document.querySelector('.pane-split-vertical');
+    expect(verticalSplit).toBeInTheDocument();
+  });
+
   it('test_close_inactive_tab_preserves_active', async () => {
     let sessionCounter = 0;
     mockCreateSession.mockImplementation(async () => `session-${++sessionCounter}`);
