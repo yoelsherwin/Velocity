@@ -138,11 +138,26 @@ html, body, #root {
   font-size: 14px;
 }
 
+.block-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .block-timestamp {
   color: #6c7086;
   font-size: 12px;
   white-space: nowrap;
 }
+
+.block-exit-code {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.exit-success { color: #a6e3a1; }  /* green */
+.exit-failure { color: #f38ba8; }  /* red */
 
 .block-output {
   padding: 2px 4px;
@@ -385,6 +400,14 @@ html, body, #root {
 .pane-split-vertical > .pane-divider {
   height: 4px;
   cursor: row-resize;
+}
+
+.pane-divider:hover {
+  background-color: #45475a;
+}
+
+.pane-divider:active {
+  background-color: #89b4fa;
 }
 
 .pane-actions {

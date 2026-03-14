@@ -1,10 +1,23 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Tab, PaneDirection } from '../../lib/types';
-import { splitPane, closePane, countLeaves, getLeafIds } from '../../lib/pane-utils';
+import { Tab, PaneDirection, PaneNode } from '../../lib/types';
+import { splitPane, closePane, countLeaves, getLeafIds, updatePaneRatio } from '../../lib/pane-utils';
 import TabBar from './TabBar';
 import PaneContainer from './PaneContainer';
 
 const MAX_PANES_TOTAL = 20;
+
+/**
+ * Find the new pane ID that was created by a split operation.
+ * Compares leaf IDs before and after splitting to identify the new one.
+ */
+function findNewPaneId(oldRoot: PaneNode, newRoot: PaneNode): string | null {
+  const oldIds = new Set(getLeafIds(oldRoot));
+  const newIds = getLeafIds(newRoot);
+  for (const id of newIds) {
+    if (!oldIds.has(id)) return id;
+  }
+  return null;
+}
 
 function TabManager() {
   const tabCounterRef = useRef(1);
@@ -15,17 +28,23 @@ function TabManager() {
       title: `Terminal ${tabCounterRef.current}`,
       shellType: 'powershell',
       paneRoot: { type: 'leaf', id: initialPaneId },
+      focusedPaneId: initialPaneId,
     };
     return [initialTab];
   });
   const tabsRef = useRef(tabs);
   const [activeTabId, setActiveTabId] = useState<string>(() => tabs[0].id);
   const activeTabIdRef = useRef(activeTabId);
-  const [focusedPaneId, setFocusedPaneId] = useState<string | null>(() => {
-    const firstTab = tabs[0];
-    return firstTab.paneRoot.type === 'leaf' ? firstTab.paneRoot.id : null;
-  });
+
+  // Derive focusedPaneId from the active tab
+  const activeTab = tabs.find((t) => t.id === activeTabId);
+  const focusedPaneId = activeTab?.focusedPaneId ?? null;
+
+  // Keep a ref in sync for keyboard shortcut handlers
   const focusedPaneIdRef = useRef(focusedPaneId);
+  useEffect(() => {
+    focusedPaneIdRef.current = focusedPaneId;
+  }, [focusedPaneId]);
 
   // Keep tabsRef in sync with tabs state
   useEffect(() => {
@@ -37,9 +56,13 @@ function TabManager() {
     setActiveTabId(id);
   }, []);
 
-  const updateFocusedPaneId = useCallback((id: string | null) => {
-    focusedPaneIdRef.current = id;
-    setFocusedPaneId(id);
+  // Update the focused pane for the currently active tab
+  const updateFocusedPaneId = useCallback((paneId: string | null) => {
+    setTabs((prev) =>
+      prev.map((t) =>
+        t.id === activeTabIdRef.current ? { ...t, focusedPaneId: paneId } : t,
+      ),
+    );
   }, []);
 
   const handleNewTab = useCallback(() => {
@@ -50,11 +73,11 @@ function TabManager() {
       title: `Terminal ${tabCounterRef.current}`,
       shellType: 'powershell',
       paneRoot: { type: 'leaf', id: initialPaneId },
+      focusedPaneId: initialPaneId,
     };
     setTabs((prev) => [...prev, newTab]);
     updateActiveTabId(newTab.id);
-    updateFocusedPaneId(initialPaneId);
-  }, [updateActiveTabId, updateFocusedPaneId]);
+  }, [updateActiveTabId]);
 
   const handleCloseTab = useCallback(
     (tabId: string) => {
@@ -70,22 +93,24 @@ function TabManager() {
           const newActiveIndex = index > 0 ? index - 1 : 0;
           const nextTab = newTabs[newActiveIndex];
           updateActiveTabId(nextTab.id);
-          // Focus the first pane of the new active tab
-          const leafIds = getLeafIds(nextTab.paneRoot);
-          updateFocusedPaneId(leafIds.length > 0 ? leafIds[0] : null);
+          // The next tab already has its own focusedPaneId preserved
         }
 
         return newTabs;
       });
     },
-    [updateActiveTabId, updateFocusedPaneId],
+    [updateActiveTabId],
   );
 
   const handleFocusPane = useCallback(
     (paneId: string) => {
-      updateFocusedPaneId(paneId);
+      setTabs((prev) =>
+        prev.map((t) =>
+          t.id === activeTabIdRef.current ? { ...t, focusedPaneId: paneId } : t,
+        ),
+      );
     },
-    [updateFocusedPaneId],
+    [],
   );
 
   const handleSplitPane = useCallback(
@@ -98,10 +123,15 @@ function TabManager() {
         return prev.map((tab) => {
           if (tab.id !== tabId) return tab;
           const newRoot = splitPane(tab.paneRoot, paneId, direction);
-          return { ...tab, paneRoot: newRoot };
+          // Auto-focus the new pane created by the split
+          const newPaneId = findNewPaneId(tab.paneRoot, newRoot);
+          return {
+            ...tab,
+            paneRoot: newRoot,
+            focusedPaneId: newPaneId ?? tab.focusedPaneId,
+          };
         });
       });
-      // Focus stays on the original pane after split
     },
     [],
   );
@@ -119,30 +149,38 @@ function TabManager() {
           if (newRoot === null) return tab; // Should not happen since we checked count
 
           // If the closed pane was focused, focus the first remaining leaf
-          if (focusedPaneIdRef.current === paneId) {
+          let newFocusedPaneId = tab.focusedPaneId;
+          if (tab.focusedPaneId === paneId) {
             const leafIds = getLeafIds(newRoot);
-            updateFocusedPaneId(leafIds.length > 0 ? leafIds[0] : null);
+            newFocusedPaneId = leafIds.length > 0 ? leafIds[0] : null;
           }
 
-          return { ...tab, paneRoot: newRoot };
+          return { ...tab, paneRoot: newRoot, focusedPaneId: newFocusedPaneId };
         }),
       );
     },
-    [updateFocusedPaneId],
+    [],
   );
 
-  // When switching tabs, update focused pane to first leaf of the new active tab
+  const handleResizePane = useCallback(
+    (tabId: string, splitId: string, newRatio: number) => {
+      setTabs((prev) =>
+        prev.map((t) =>
+          t.id === tabId ? { ...t, paneRoot: updatePaneRatio(t.paneRoot, splitId, newRatio) } : t,
+        ),
+      );
+    },
+    [],
+  );
+
+  // When switching tabs, just update activeTabId — focusedPaneId is per-tab
   const handleSelectTab = useCallback(
     (tabId: string) => {
       updateActiveTabId(tabId);
-      // Read current tabs from the ref instead of abusing setTabs as a reader
-      const tab = tabsRef.current.find((t) => t.id === tabId);
-      if (tab) {
-        const leafIds = getLeafIds(tab.paneRoot);
-        updateFocusedPaneId(leafIds.length > 0 ? leafIds[0] : null);
-      }
+      // No need to update focusedPaneId; it's stored per-tab and will be
+      // derived automatically from the new active tab
     },
-    [updateActiveTabId, updateFocusedPaneId],
+    [updateActiveTabId],
   );
 
   // Global keyboard shortcuts
@@ -207,10 +245,11 @@ function TabManager() {
           >
             <PaneContainer
               node={tab.paneRoot}
-              focusedPaneId={focusedPaneId}
+              focusedPaneId={tab.id === activeTabId ? focusedPaneId : tab.focusedPaneId}
               onFocusPane={handleFocusPane}
               onSplitPane={(paneId, dir) => handleSplitPane(tab.id, paneId, dir)}
               onClosePane={(paneId) => handleClosePane(tab.id, paneId)}
+              onResizePane={(splitId, newRatio) => handleResizePane(tab.id, splitId, newRatio)}
               isOnlyPane={countLeaves(tab.paneRoot) === 1}
             />
           </div>

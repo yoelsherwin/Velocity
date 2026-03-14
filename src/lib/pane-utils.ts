@@ -110,3 +110,24 @@ export function getLeafIds(root: PaneNode): string[] {
   }
   return [...getLeafIds(root.first), ...getLeafIds(root.second)];
 }
+
+/**
+ * Update the ratio of a specific split node by ID.
+ * Returns a new tree (immutable). If the splitId is not found, returns the original tree.
+ */
+export function updatePaneRatio(root: PaneNode, splitId: string, newRatio: number): PaneNode {
+  if (root.type === 'leaf') return root;
+  if (root.id === splitId) {
+    return { ...root, ratio: newRatio };
+  }
+
+  const newFirst = updatePaneRatio(root.first, splitId, newRatio);
+  const newSecond = updatePaneRatio(root.second, splitId, newRatio);
+
+  // If neither child changed, return the original node (referential equality for "not found")
+  if (newFirst === root.first && newSecond === root.second) {
+    return root;
+  }
+
+  return { ...root, first: newFirst, second: newSecond };
+}

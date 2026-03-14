@@ -5,6 +5,7 @@ import {
   findPane,
   countLeaves,
   getLeafIds,
+  updatePaneRatio,
 } from '../lib/pane-utils';
 import type { PaneNode } from '../lib/types';
 
@@ -155,5 +156,86 @@ describe('pane-utils', () => {
 
     const found = findPane(root, 'nonexistent');
     expect(found).toBeNull();
+  });
+
+  // --- Task 013: updatePaneRatio tests ---
+
+  it('test_updatePaneRatio', () => {
+    const root: PaneNode = {
+      type: 'split',
+      id: 'split-1',
+      direction: 'horizontal',
+      first: leaf('pane-1'),
+      second: leaf('pane-2'),
+      ratio: 0.5,
+    };
+
+    const updated = updatePaneRatio(root, 'split-1', 0.7);
+    expect(updated.type).toBe('split');
+    if (updated.type === 'split') {
+      expect(updated.ratio).toBe(0.7);
+      // Children should be unchanged
+      expect(updated.first).toEqual(leaf('pane-1'));
+      expect(updated.second).toEqual(leaf('pane-2'));
+    }
+  });
+
+  it('test_updatePaneRatio_nested', () => {
+    // Build a nested tree:
+    //   split-1 (ratio 0.5)
+    //   ├── leaf (pane-1)
+    //   └── split-2 (ratio 0.5)
+    //       ├── leaf (pane-2)
+    //       └── leaf (pane-3)
+    const root: PaneNode = {
+      type: 'split',
+      id: 'split-1',
+      direction: 'horizontal',
+      first: leaf('pane-1'),
+      second: {
+        type: 'split',
+        id: 'split-2',
+        direction: 'vertical',
+        first: leaf('pane-2'),
+        second: leaf('pane-3'),
+        ratio: 0.5,
+      },
+      ratio: 0.5,
+    };
+
+    // Update only the inner split
+    const updated = updatePaneRatio(root, 'split-2', 0.3);
+    expect(updated.type).toBe('split');
+    if (updated.type === 'split') {
+      // Outer split ratio should remain unchanged
+      expect(updated.ratio).toBe(0.5);
+      // Inner split ratio should be updated
+      expect(updated.second.type).toBe('split');
+      if (updated.second.type === 'split') {
+        expect(updated.second.ratio).toBe(0.3);
+      }
+    }
+  });
+
+  it('test_updatePaneRatio_leaf_returns_unchanged', () => {
+    const root = leaf('pane-1');
+    const updated = updatePaneRatio(root, 'split-1', 0.7);
+    // Leaf nodes are returned unchanged
+    expect(updated).toBe(root);
+  });
+
+  it('test_updatePaneRatio_not_found_returns_unchanged', () => {
+    const root: PaneNode = {
+      type: 'split',
+      id: 'split-1',
+      direction: 'horizontal',
+      first: leaf('pane-1'),
+      second: leaf('pane-2'),
+      ratio: 0.5,
+    };
+
+    const updated = updatePaneRatio(root, 'nonexistent', 0.7);
+    // When ID not found, tree is structurally unchanged
+    expect(updated).toBe(root);
   });
 });
