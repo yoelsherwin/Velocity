@@ -341,3 +341,69 @@ html, body, #root {
   flex-direction: column;
   min-height: 0;
 }
+
+/* --- Pane Layout Styles --- */
+
+.pane-leaf {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 200px;
+  min-height: 100px;
+  border: 1px solid transparent;
+}
+
+.pane-focused {
+  border-left: 2px solid #89b4fa;
+}
+
+.pane-split {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+.pane-divider {
+  background-color: #313244;
+  flex-shrink: 0;
+}
+
+.pane-split-horizontal > .pane-divider {
+  width: 4px;
+  cursor: col-resize;
+}
+
+.pane-split-vertical > .pane-divider {
+  height: 4px;
+  cursor: row-resize;
+}
+
+.pane-actions {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: none;
+  gap: 2px;
+  z-index: 10;
+}
+
+.pane-leaf:hover .pane-actions {
+  display: flex;
+}
+
+.pane-action-btn {
+  padding: 2px 6px;
+  border: none;
+  border-radius: 3px;
+  background: #313244;
+  color: #a6adc8;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.pane-action-btn:hover {
+  background: #45475a;
+  color: #cdd6f4;
+}

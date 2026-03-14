@@ -26,7 +26,7 @@ Next task number: 010
 | FIX-011 | Batch fix for missed findings (QA audit) | `b19111d` | — | — | — |
 
 ## In Progress
-None.
+TASK-010: Split Panes — Vertical and Horizontal Splitting
 
 ## Outstanding Issues — Tracked (from QA Audit)
 

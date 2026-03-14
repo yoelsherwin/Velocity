@@ -230,6 +230,70 @@ describe('TabManager', () => {
     expect(tabButtons).toHaveLength(1);
   });
 
+  // --- Task 010: Split pane integration tests ---
+
+  it('test_split_pane_creates_two_terminals', async () => {
+    render(<TabManager />);
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    // Should start with 1 terminal output area
+    let terminals = screen.getAllByTestId('terminal-output');
+    expect(terminals).toHaveLength(1);
+
+    // Press Ctrl+Shift+ArrowRight to split the pane horizontally
+    await act(async () => {
+      fireEvent.keyDown(document, {
+        key: 'ArrowRight',
+        ctrlKey: true,
+        shiftKey: true,
+      });
+    });
+
+    // Should now have 2 terminal output areas
+    await waitFor(() => {
+      terminals = screen.getAllByTestId('terminal-output');
+      expect(terminals).toHaveLength(2);
+    });
+  });
+
+  it('test_close_pane_removes_split', async () => {
+    render(<TabManager />);
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    // Split the pane
+    await act(async () => {
+      fireEvent.keyDown(document, {
+        key: 'ArrowRight',
+        ctrlKey: true,
+        shiftKey: true,
+      });
+    });
+
+    await waitFor(() => {
+      const terminals = screen.getAllByTestId('terminal-output');
+      expect(terminals).toHaveLength(2);
+    });
+
+    // Close the focused pane with Ctrl+Shift+W
+    await act(async () => {
+      fireEvent.keyDown(document, {
+        key: 'W',
+        ctrlKey: true,
+        shiftKey: true,
+      });
+    });
+
+    // Should be back to 1 terminal
+    await waitFor(() => {
+      const terminals = screen.getAllByTestId('terminal-output');
+      expect(terminals).toHaveLength(1);
+    });
+  });
+
   it('test_close_inactive_tab_preserves_active', async () => {
     let sessionCounter = 0;
     mockCreateSession.mockImplementation(async () => `session-${++sessionCounter}`);
