@@ -302,7 +302,6 @@ function Terminal() {
             onChange={setInput}
             onSubmit={(cmd) => { submitCommand(cmd); setInput(''); }}
             disabled={closed}
-            shellType={shellType}
           />
         </div>
       )}

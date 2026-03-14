@@ -1,16 +1,14 @@
 import { useMemo, useCallback, useRef } from 'react';
 import { tokenize } from '../../lib/shell-tokenizer';
-import { ShellType } from '../../lib/types';
 
 interface InputEditorProps {
   value: string;
   onChange: (value: string) => void;
   onSubmit: (value: string) => void;
   disabled?: boolean;
-  shellType: ShellType;
 }
 
-function InputEditor({ value, onChange, onSubmit, disabled, shellType }: InputEditorProps) {
+function InputEditor({ value, onChange, onSubmit, disabled }: InputEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const tokens = useMemo(() => tokenize(value), [value]);

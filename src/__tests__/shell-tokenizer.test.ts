@@ -106,4 +106,22 @@ describe('Shell Tokenizer', () => {
       { type: 'argument', value: 'hello' },
     ]);
   });
+
+  it('test_unclosed_double_quote', () => {
+    const tokens = tokenize('echo "hello world');
+    expect(tokens).toEqual([
+      { type: 'command', value: 'echo' },
+      { type: 'whitespace', value: ' ' },
+      { type: 'string', value: '"hello world' },
+    ]);
+  });
+
+  it('test_unclosed_single_quote', () => {
+    const tokens = tokenize("echo 'hello world");
+    expect(tokens).toEqual([
+      { type: 'command', value: 'echo' },
+      { type: 'whitespace', value: ' ' },
+      { type: 'string', value: "'hello world" },
+    ]);
+  });
 });

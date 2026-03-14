@@ -48,35 +48,6 @@ html, body, #root {
   word-break: break-all;
 }
 
-.terminal-input-row {
-  display: flex;
-  align-items: center;
-  padding: 4px 8px;
-  border-top: 1px solid #313244;
-  background-color: #1e1e2e;
-}
-
-.terminal-prompt {
-  color: #a6adc8;
-  margin-right: 8px;
-  user-select: none;
-}
-
-.terminal-input {
-  flex: 1;
-  background: transparent;
-  border: none;
-  outline: none;
-  color: #cdd6f4;
-  font-family: inherit;
-  font-size: inherit;
-  line-height: inherit;
-}
-
-.terminal-input:disabled {
-  opacity: 0.5;
-}
-
 .shell-selector {
   display: flex;
   gap: 4px;

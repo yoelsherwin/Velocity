@@ -7,7 +7,6 @@ describe('InputEditor Component', () => {
     value: '',
     onChange: vi.fn(),
     onSubmit: vi.fn(),
-    shellType: 'powershell' as const,
   };
 
   it('test_renders_textarea', () => {
@@ -60,19 +59,12 @@ describe('InputEditor Component', () => {
   it('test_tab_inserts_spaces', () => {
     const onChange = vi.fn();
     render(<InputEditor {...defaultProps} value="" onChange={onChange} />);
-    const textarea = screen.getByTestId('editor-textarea') as HTMLTextAreaElement;
+    const textarea = screen.getByTestId('editor-textarea');
 
-    // Simulate Tab key
-    const event = new KeyboardEvent('keydown', {
-      key: 'Tab',
-      bubbles: true,
-      cancelable: true,
-    });
-    const preventDefaultSpy = vi.spyOn(event, 'preventDefault');
-    textarea.dispatchEvent(event);
+    fireEvent.keyDown(textarea, { key: 'Tab' });
 
-    // Tab should call preventDefault to avoid focus change
-    expect(preventDefaultSpy).toHaveBeenCalled();
+    // Tab should insert two spaces via onChange
+    expect(onChange).toHaveBeenCalledWith('  ');
   });
 
   it('test_disabled_prevents_input', () => {

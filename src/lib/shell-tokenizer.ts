@@ -29,7 +29,7 @@ export function tokenize(input: string): Token[] {
   // 3. Redirect operators (>>  must come before >)
   // 4. Pipe or single redirect
   // 5. Non-whitespace words
-  const pattern = /(\s+)|("(?:[^"\\]|\\.)*")|('(?:[^'\\]|\\.)*')|(>>)|([|><])|(\S+)/g;
+  const pattern = /(\s+)|("(?:[^"\\]|\\.)*"?)|('(?:[^'\\]|\\.)*'?)|(>>)|([|><])|(\S+)/g;
 
   // Track whether the next non-whitespace token should be a command.
   // True at the start of each line and after a pipe.
@@ -37,7 +37,7 @@ export function tokenize(input: string): Token[] {
 
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(input)) !== null) {
-    const [fullMatch, whitespace, dblString, sglString, doubleRedirect, pipeOrRedirect, word] = match;
+    const [_fullMatch, whitespace, dblString, sglString, doubleRedirect, pipeOrRedirect, word] = match;
 
     if (whitespace !== undefined) {
       tokens.push({ type: 'whitespace', value: whitespace });
