@@ -552,6 +552,52 @@ describe('Terminal Component', () => {
     });
   });
 
+  it('test_exit_command_skips_marker', async () => {
+    render(<Terminal />);
+
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    const textarea = screen.getByTestId('editor-textarea');
+    fireEvent.change(textarea, { target: { value: 'exit' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(mockWriteToSession).toHaveBeenCalledWith(
+        'test-session-id',
+        'exit\r',
+      );
+    });
+
+    // The marker suffix should NOT be present
+    const writtenCommand = mockWriteToSession.mock.calls[0][1];
+    expect(writtenCommand).not.toContain('VELOCITY_EXIT');
+  });
+
+  it('test_exit_with_args_skips_marker', async () => {
+    render(<Terminal />);
+
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    const textarea = screen.getByTestId('editor-textarea');
+    fireEvent.change(textarea, { target: { value: 'exit 1' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(mockWriteToSession).toHaveBeenCalledWith(
+        'test-session-id',
+        'exit 1\r',
+      );
+    });
+
+    // The marker suffix should NOT be present
+    const writtenCommand = mockWriteToSession.mock.calls[0][1];
+    expect(writtenCommand).not.toContain('VELOCITY_EXIT');
+  });
+
   it('test_exit_code_extracted_when_marker_split_across_chunks', async () => {
     render(<Terminal />);
 
