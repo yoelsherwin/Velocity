@@ -5,13 +5,19 @@ node_modules/
 dist/
 target/
 
-# Environment
+# Environment / secrets
 .env
 .env.*
+*.local
 
-# Logs
-*.log
-npm-debug.log*
+# Settings (stored in %LOCALAPPDATA%/Velocity/, not in repo)
+# %LOCALAPPDATA%/Velocity/settings.json
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
 
 # Editor directories and files
 .vscode/*
@@ -22,17 +28,17 @@ npm-debug.log*
 *.njsproj
 *.sln
 *.sw?
+
+# OS
 .DS_Store
+Thumbs.db
 
-# Playwright
-/test-results/
-/playwright-report/
-/blob-report/
-/playwright/.cache/
+# Logs
+*.log
+npm-debug.log*
 
-# Local config
-*.local
-
+# Windows
 nul
 
+# Claude Code local settings
 .claude/settings.local.json

@@ -2,6 +2,9 @@
   "name": "velocity",
   "private": true,
   "version": "0.1.0",
+  "description": "Modern Windows terminal with AI-powered command translation",
+  "author": "Velocity Contributors",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vite",
