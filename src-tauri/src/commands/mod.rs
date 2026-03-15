@@ -1,3 +1,4 @@
+use crate::llm;
 use crate::pty::SessionManager;
 use crate::settings::{self, AppSettings};
 use std::sync::{Arc, Mutex};
@@ -111,4 +112,20 @@ pub async fn get_settings() -> Result<AppSettings, String> {
 pub async fn save_app_settings(settings: AppSettings) -> Result<(), String> {
     settings::validate_settings(&settings)?;
     settings::save_settings(&settings)
+}
+
+#[tauri::command]
+pub async fn translate_command(
+    input: String,
+    shell_type: String,
+    cwd: String,
+) -> Result<String, String> {
+    let settings = settings::load_settings()?;
+    let request = llm::TranslationRequest {
+        prompt: input,
+        shell_type,
+        cwd,
+    };
+    let response = llm::translate_command(&settings, &request).await?;
+    Ok(response.command)
 }

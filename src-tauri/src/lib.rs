@@ -1,5 +1,6 @@
 pub mod ansi;
 mod commands;
+pub mod llm;
 pub mod pty;
 pub mod settings;
 
@@ -21,6 +22,7 @@ pub fn run() {
             commands::close_session,
             commands::get_settings,
             commands::save_app_settings,
+            commands::translate_command,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
