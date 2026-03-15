@@ -40,6 +40,7 @@ function Terminal() {
   const [closed, setClosed] = useState(false);
   const [agentLoading, setAgentLoading] = useState(false);
   const [agentError, setAgentError] = useState<string | null>(null);
+  const translationIdRef = useRef(0);
   const outputRef = useRef<HTMLDivElement>(null);
   const unlistenRefs = useRef<(() => void)[]>([]);
   const startSessionIdRef = useRef(0);
@@ -183,6 +184,8 @@ function Terminal() {
     async (shell: ShellType) => {
       // Increment counter to cancel any in-flight startSession
       startSessionIdRef.current++;
+      // Cancel any in-flight agent translation
+      translationIdRef.current++;
 
       cleanupListeners(); // Stop listening FIRST to prevent stale events during async gap
       if (sessionIdRef.current) {
@@ -224,6 +227,9 @@ function Terminal() {
   const handleShellSwitch = useCallback(
     async (newShell: ShellType) => {
       if (newShell === shellType && !closed) return;
+      // Cancel any in-flight agent translation immediately on shell switch
+      translationIdRef.current++;
+      setAgentLoading(false);
       setShellType(newShell);
       await resetAndStart(newShell);
     },
@@ -295,16 +301,23 @@ function Terminal() {
           setInput('');
           return;
         }
+        const thisTranslation = ++translationIdRef.current;
         setAgentLoading(true);
         setAgentError(null);
         try {
           const cwd = await getCwd().catch(() => 'C:\\');
           const translated = await translateCommand(nlInput, shellType, cwd);
+          // Discard stale translation if user switched shells or reset while in-flight
+          if (translationIdRef.current !== thisTranslation) return;
           setInput(translated); // Put translated command in the editor for review
         } catch (err) {
+          // Discard stale error if user switched shells or reset while in-flight
+          if (translationIdRef.current !== thisTranslation) return;
           setAgentError(String(err));
         } finally {
-          setAgentLoading(false);
+          if (translationIdRef.current === thisTranslation) {
+            setAgentLoading(false);
+          }
         }
         return; // Don't execute — user reviews first
       }
