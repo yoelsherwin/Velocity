@@ -275,11 +275,11 @@ Include function signatures, parameter types, and return types.]
 The dev agent MUST write these tests before any implementation code.
 See `prompts/TESTING.md` for the full testing strategy.
 
-### Rust Integration Tests (real PTY, no mocks — REQUIRED for backend tasks)
+### Rust Integration Tests (REQUIRED if task touches backend/PTY/IPC)
 - [ ] [Specific test: spawn real shell, send input, verify output]
 - [ ] [Specific test: ...]
 
-### Rust Unit Tests (cargo test)
+### Rust Unit Tests
 - [ ] [Specific test: what function, what input, what expected output]
 - [ ] [Specific test: ...]
 
@@ -287,12 +287,21 @@ See `prompts/TESTING.md` for the full testing strategy.
 - [ ] [Specific test: what component/hook, what behavior to verify]
 - [ ] [Specific test: ...]
 
-### E2E Tests (Playwright) — if applicable
+### E2E Tests (Playwright) (REQUIRED if task changes user-visible behavior)
 - [ ] [Specific test: what user action, what expected result]
+- [ ] [Specific test: ...]
 
-**IMPORTANT**: Do NOT rely solely on mocked tests for backend functionality.
-Any task that touches PTY, IPC commands, or process management MUST include
-Rust integration tests with real shell processes.
+**When is each test type REQUIRED?**
+
+| Test Type | Required When | Skip Only If |
+|-----------|--------------|--------------|
+| Rust Integration | Task touches PTY, IPC commands, process management, ANSI | Task is frontend-only |
+| Rust Unit | Task adds any Rust logic | Task is frontend-only |
+| Frontend (Vitest) | Task adds/changes UI components or hooks | Task is backend-only with no UI |
+| **E2E (Playwright)** | **Task changes what the user sees or interacts with** | Task is purely internal refactor with no UI change |
+
+**If you leave a test section empty, you MUST write why it's skipped.**
+Do not write "if applicable" or "N/A" — write the specific reason.
 
 ## Acceptance Criteria
 - [ ] All tests above are written and passing
