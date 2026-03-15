@@ -47,12 +47,16 @@ pub fn load_settings() -> Result<AppSettings, String> {
 }
 
 /// Persists settings to disk as pretty-printed JSON.
+/// Uses atomic write (write to .tmp then rename) to prevent corruption on crash.
 pub fn save_settings(settings: &AppSettings) -> Result<(), String> {
     let path = settings_path()?;
     let content = serde_json::to_string_pretty(settings)
         .map_err(|e| format!("Failed to serialize settings: {}", e))?;
-    std::fs::write(&path, content)
-        .map_err(|e| format!("Failed to write settings: {}", e))
+    let tmp_path = path.with_extension("json.tmp");
+    std::fs::write(&tmp_path, &content)
+        .map_err(|e| format!("Failed to write settings: {}", e))?;
+    std::fs::rename(&tmp_path, &path)
+        .map_err(|e| format!("Failed to finalize settings file: {}", e))
 }
 
 /// Validates that the provider is one of the accepted values.
@@ -65,11 +69,17 @@ pub fn validate_provider(provider: &str) -> Result<(), String> {
 
 /// Validates the full settings object.
 /// - Provider must be one of: openai, anthropic, google, azure
-/// - Azure provider requires an endpoint URL
+/// - Azure provider requires a non-empty endpoint URL
 pub fn validate_settings(settings: &AppSettings) -> Result<(), String> {
     validate_provider(&settings.llm_provider)?;
-    if settings.llm_provider == "azure" && settings.azure_endpoint.is_none() {
-        return Err("Azure provider requires an endpoint URL".to_string());
+    if settings.llm_provider == "azure" {
+        match &settings.azure_endpoint {
+            None => return Err("Azure provider requires an endpoint URL".to_string()),
+            Some(ep) if ep.trim().is_empty() => {
+                return Err("Azure endpoint cannot be empty".to_string())
+            }
+            _ => {}
+        }
     }
     Ok(())
 }
@@ -181,5 +191,39 @@ mod tests {
         };
 
         assert!(validate_settings(&settings).is_ok());
+    }
+
+    #[test]
+    fn test_azure_endpoint_rejects_empty_string() {
+        let settings = AppSettings {
+            llm_provider: "azure".to_string(),
+            api_key: "some-key".to_string(),
+            model: "gpt-4o-mini".to_string(),
+            azure_endpoint: Some("".to_string()),
+        };
+
+        let result = validate_settings(&settings);
+        assert!(result.is_err());
+        assert!(
+            result.unwrap_err().contains("Azure endpoint cannot be empty"),
+            "Should reject empty string endpoint"
+        );
+    }
+
+    #[test]
+    fn test_azure_endpoint_rejects_whitespace_only() {
+        let settings = AppSettings {
+            llm_provider: "azure".to_string(),
+            api_key: "some-key".to_string(),
+            model: "gpt-4o-mini".to_string(),
+            azure_endpoint: Some("   ".to_string()),
+        };
+
+        let result = validate_settings(&settings);
+        assert!(result.is_err());
+        assert!(
+            result.unwrap_err().contains("Azure endpoint cannot be empty"),
+            "Should reject whitespace-only endpoint"
+        );
     }
 }

@@ -27,4 +27,5 @@ uuid = { version = "1", features = ["v4"] }
 tokio = { version = "1", features = ["rt", "macros"] }
 reqwest = { version = "0.12", features = ["json"] }
 dirs = "6"
+urlencoding = "2"
 

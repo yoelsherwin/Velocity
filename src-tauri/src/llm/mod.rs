@@ -2,6 +2,7 @@ use crate::settings::AppSettings;
 use reqwest::Client;
 use serde_json::Value;
 use std::sync::OnceLock;
+use urlencoding::encode as url_encode;
 
 /// Shared HTTP client with reasonable defaults, created once and reused.
 fn http_client() -> &'static Client {
@@ -79,6 +80,27 @@ fn clean_response(raw: &str) -> String {
     trimmed.to_string()
 }
 
+/// Sanitizes error messages by replacing API keys with [REDACTED].
+/// Applied to all provider error paths as defense in depth.
+fn sanitize_error(error: &str, api_key: &str) -> String {
+    if api_key.is_empty() {
+        return error.to_string();
+    }
+    error.replace(api_key, "[REDACTED]")
+}
+
+/// Validates that a model name is safe for URL path interpolation.
+/// Rejects characters that could break URL structure.
+fn validate_model_for_url(model: &str) -> Result<(), String> {
+    if model.is_empty() {
+        return Err("Model name cannot be empty".to_string());
+    }
+    if model.contains('?') || model.contains('#') || model.contains('&') {
+        return Err("Model name contains invalid URL characters".to_string());
+    }
+    Ok(())
+}
+
 /// Translates a natural language prompt into a shell command using the configured LLM provider.
 pub async fn translate_command(
     settings: &AppSettings,
@@ -139,19 +161,22 @@ async fn call_openai(
         .json(&body)
         .send()
         .await
-        .map_err(|e| format!("HTTP request failed: {}", e))?;
+        .map_err(|e| sanitize_error(&format!("HTTP request failed: {}", e), api_key))?;
 
     let status = response.status();
     let json: Value = response
         .json()
         .await
-        .map_err(|e| format!("Failed to parse response: {}", e))?;
+        .map_err(|e| sanitize_error(&format!("Failed to parse response: {}", e), api_key))?;
 
     if !status.is_success() {
         let error_msg = json["error"]["message"]
             .as_str()
             .unwrap_or("Unknown API error");
-        return Err(format!("OpenAI API error ({}): {}", status, error_msg));
+        return Err(sanitize_error(
+            &format!("OpenAI API error ({}): {}", status, error_msg),
+            api_key,
+        ));
     }
 
     let content = json["choices"][0]["message"]["content"]
@@ -186,19 +211,22 @@ async fn call_anthropic(
         .json(&body)
         .send()
         .await
-        .map_err(|e| format!("HTTP request failed: {}", e))?;
+        .map_err(|e| sanitize_error(&format!("HTTP request failed: {}", e), api_key))?;
 
     let status = response.status();
     let json: Value = response
         .json()
         .await
-        .map_err(|e| format!("Failed to parse response: {}", e))?;
+        .map_err(|e| sanitize_error(&format!("Failed to parse response: {}", e), api_key))?;
 
     if !status.is_success() {
         let error_msg = json["error"]["message"]
             .as_str()
             .unwrap_or("Unknown API error");
-        return Err(format!("Anthropic API error ({}): {}", status, error_msg));
+        return Err(sanitize_error(
+            &format!("Anthropic API error ({}): {}", status, error_msg),
+            api_key,
+        ));
     }
 
     let content = json["content"][0]["text"]
@@ -217,9 +245,11 @@ async fn call_google(
     system_prompt: &str,
     user_message: &str,
 ) -> Result<TranslationResponse, String> {
+    validate_model_for_url(model)?;
+    let encoded_model = url_encode(model);
     let url = format!(
         "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}",
-        model, api_key
+        encoded_model, api_key
     );
 
     let body = serde_json::json!({
@@ -234,19 +264,22 @@ async fn call_google(
         .json(&body)
         .send()
         .await
-        .map_err(|e| format!("HTTP request failed: {}", e))?;
+        .map_err(|e| sanitize_error(&format!("HTTP request failed: {}", e), api_key))?;
 
     let status = response.status();
     let json: Value = response
         .json()
         .await
-        .map_err(|e| format!("Failed to parse response: {}", e))?;
+        .map_err(|e| sanitize_error(&format!("Failed to parse response: {}", e), api_key))?;
 
     if !status.is_success() {
         let error_msg = json["error"]["message"]
             .as_str()
             .unwrap_or("Unknown API error");
-        return Err(format!("Google API error ({}): {}", status, error_msg));
+        return Err(sanitize_error(
+            &format!("Google API error ({}): {}", status, error_msg),
+            api_key,
+        ));
     }
 
     let content = json["candidates"][0]["content"]["parts"][0]["text"]
@@ -272,10 +305,16 @@ async fn call_azure(
         return Err("Azure endpoint must use HTTPS.".to_string());
     }
 
+    if endpoint.contains('?') || endpoint.contains('#') {
+        return Err("Azure endpoint must not contain query parameters or fragments".to_string());
+    }
+
+    validate_model_for_url(model)?;
+    let encoded_model = url_encode(model);
     let url = format!(
         "{}/openai/deployments/{}/chat/completions?api-version=2024-02-01",
         endpoint.trim_end_matches('/'),
-        model
+        encoded_model
     );
 
     let body = serde_json::json!({
@@ -295,19 +334,22 @@ async fn call_azure(
         .json(&body)
         .send()
         .await
-        .map_err(|e| format!("HTTP request failed: {}", e))?;
+        .map_err(|e| sanitize_error(&format!("HTTP request failed: {}", e), api_key))?;
 
     let status = response.status();
     let json: Value = response
         .json()
         .await
-        .map_err(|e| format!("Failed to parse response: {}", e))?;
+        .map_err(|e| sanitize_error(&format!("Failed to parse response: {}", e), api_key))?;
 
     if !status.is_success() {
         let error_msg = json["error"]["message"]
             .as_str()
             .unwrap_or("Unknown API error");
-        return Err(format!("Azure API error ({}): {}", status, error_msg));
+        return Err(sanitize_error(
+            &format!("Azure API error ({}): {}", status, error_msg),
+            api_key,
+        ));
     }
 
     let content = json["choices"][0]["message"]["content"]
@@ -415,6 +457,115 @@ mod tests {
         assert!(
             err.contains("Unknown provider"),
             "Error should mention unknown provider, got: {}",
+            err
+        );
+    }
+
+    // --- Error sanitization tests ---
+
+    #[test]
+    fn test_sanitize_error_redacts_key() {
+        let api_key = "sk-super-secret-key-12345";
+        let error = format!("HTTP request failed: https://api.example.com?key={}", api_key);
+        let sanitized = sanitize_error(&error, api_key);
+        assert!(
+            !sanitized.contains(api_key),
+            "Sanitized error should not contain the API key"
+        );
+        assert!(
+            sanitized.contains("[REDACTED]"),
+            "Sanitized error should contain [REDACTED]"
+        );
+    }
+
+    #[test]
+    fn test_sanitize_error_empty_key_passthrough() {
+        let error = "HTTP request failed: some error";
+        let sanitized = sanitize_error(error, "");
+        assert_eq!(sanitized, error, "Empty key should pass through unchanged");
+    }
+
+    #[test]
+    fn test_sanitize_error_multiple_occurrences() {
+        let api_key = "my-secret";
+        let error = format!("Error: {} and also {}", api_key, api_key);
+        let sanitized = sanitize_error(&error, api_key);
+        assert!(
+            !sanitized.contains(api_key),
+            "All occurrences of key should be redacted"
+        );
+        assert_eq!(
+            sanitized.matches("[REDACTED]").count(),
+            2,
+            "Should have two [REDACTED] placeholders"
+        );
+    }
+
+    // --- URL validation tests ---
+
+    #[test]
+    fn test_validate_model_for_url_accepts_normal() {
+        assert!(validate_model_for_url("gpt-4o-mini").is_ok());
+        assert!(validate_model_for_url("claude-sonnet-4-5-20250929").is_ok());
+        assert!(validate_model_for_url("gemini-2.0-flash").is_ok());
+    }
+
+    #[test]
+    fn test_validate_model_for_url_rejects_query_chars() {
+        assert!(validate_model_for_url("model?injection=true").is_err());
+        assert!(validate_model_for_url("model#fragment").is_err());
+        assert!(validate_model_for_url("model&extra=param").is_err());
+    }
+
+    #[test]
+    fn test_validate_model_for_url_rejects_empty() {
+        assert!(validate_model_for_url("").is_err());
+    }
+
+    // --- Azure endpoint validation tests ---
+
+    #[tokio::test]
+    async fn test_azure_endpoint_rejects_query_params() {
+        let settings = AppSettings {
+            llm_provider: "azure".to_string(),
+            api_key: "some-key".to_string(),
+            model: "gpt-4o-mini".to_string(),
+            azure_endpoint: Some("https://my-instance.openai.azure.com?foo=bar".to_string()),
+        };
+        let request = TranslationRequest {
+            prompt: "list files".to_string(),
+            shell_type: "powershell".to_string(),
+            cwd: "C:\\Users\\test".to_string(),
+        };
+        let result = translate_command(&settings, &request).await;
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("must not contain query parameters"),
+            "Should reject endpoint with query params, got: {}",
+            err
+        );
+    }
+
+    #[tokio::test]
+    async fn test_azure_endpoint_rejects_fragment() {
+        let settings = AppSettings {
+            llm_provider: "azure".to_string(),
+            api_key: "some-key".to_string(),
+            model: "gpt-4o-mini".to_string(),
+            azure_endpoint: Some("https://my-instance.openai.azure.com#frag".to_string()),
+        };
+        let request = TranslationRequest {
+            prompt: "list files".to_string(),
+            shell_type: "powershell".to_string(),
+            cwd: "C:\\Users\\test".to_string(),
+        };
+        let result = translate_command(&settings, &request).await;
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("must not contain query parameters"),
+            "Should reject endpoint with fragment, got: {}",
             err
         );
     }
