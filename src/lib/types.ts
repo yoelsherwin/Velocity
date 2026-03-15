@@ -29,3 +29,21 @@ export interface Block {
   exitCode?: number | null; // Exit code from the shell (0 = success, non-zero = failure)
   shellType: ShellType;
 }
+
+// --- Settings / LLM Provider Types ---
+
+export interface AppSettings {
+  llm_provider: LlmProviderId;
+  api_key: string;
+  model: string;
+  azure_endpoint?: string;
+}
+
+export const LLM_PROVIDERS = [
+  { id: 'openai', name: 'OpenAI', defaultModel: 'gpt-4o-mini', models: ['gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo'] },
+  { id: 'anthropic', name: 'Anthropic (Claude)', defaultModel: 'claude-sonnet-4-5-20250929', models: ['claude-sonnet-4-5-20250929', 'claude-haiku-4-5-20251001', 'claude-opus-4-6-20250918'] },
+  { id: 'google', name: 'Google (Gemini)', defaultModel: 'gemini-2.0-flash', models: ['gemini-2.0-flash', 'gemini-2.5-pro'] },
+  { id: 'azure', name: 'Azure OpenAI', defaultModel: 'gpt-4o-mini', models: ['gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo'] },
+] as const;
+
+export type LlmProviderId = typeof LLM_PROVIDERS[number]['id'];

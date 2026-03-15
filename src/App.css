@@ -437,3 +437,179 @@ html, body, #root {
   background: #45475a;
   color: #cdd6f4;
 }
+
+/* --- Settings Button in TabBar --- */
+
+.tab-bar-spacer {
+  flex: 1;
+}
+
+.tab-settings-btn {
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  color: #6c7086;
+  font-size: 16px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.tab-settings-btn:hover {
+  color: #cdd6f4;
+  background-color: #313244;
+}
+
+/* --- Settings Modal Styles --- */
+
+.settings-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.settings-dialog {
+  background-color: #1e1e2e;
+  border: 1px solid #313244;
+  border-radius: 8px;
+  padding: 24px;
+  width: 480px;
+  max-width: 90vw;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.settings-title {
+  color: #cdd6f4;
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #313244;
+}
+
+.settings-loading {
+  color: #a6adc8;
+  text-align: center;
+  padding: 20px;
+}
+
+.settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settings-label {
+  color: #a6adc8;
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: -4px;
+}
+
+.settings-select,
+.settings-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #45475a;
+  border-radius: 4px;
+  background-color: #313244;
+  color: #cdd6f4;
+  font-family: inherit;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.settings-select:focus,
+.settings-input:focus {
+  border-color: #89b4fa;
+}
+
+.settings-api-key-row {
+  display: flex;
+  gap: 8px;
+}
+
+.settings-api-key-row .settings-input {
+  flex: 1;
+}
+
+.settings-toggle-btn {
+  padding: 8px 12px;
+  border: 1px solid #45475a;
+  border-radius: 4px;
+  background-color: #313244;
+  color: #a6adc8;
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.settings-toggle-btn:hover {
+  background-color: #45475a;
+  color: #cdd6f4;
+}
+
+.settings-error {
+  padding: 8px 12px;
+  border-radius: 4px;
+  background-color: rgba(243, 139, 168, 0.1);
+  border: 1px solid #f38ba8;
+  color: #f38ba8;
+  font-size: 13px;
+}
+
+.settings-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 16px;
+  border-top: 1px solid #313244;
+}
+
+.settings-btn {
+  padding: 8px 20px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.settings-btn-cancel {
+  background-color: transparent;
+  border-color: #45475a;
+  color: #a6adc8;
+}
+
+.settings-btn-cancel:hover {
+  background-color: #313244;
+  color: #cdd6f4;
+}
+
+.settings-btn-save {
+  background-color: #89b4fa;
+  color: #1e1e2e;
+  font-weight: 600;
+}
+
+.settings-btn-save:hover {
+  background-color: #74c7ec;
+}
+
+.settings-btn-save:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

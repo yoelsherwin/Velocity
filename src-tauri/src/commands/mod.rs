@@ -1,4 +1,5 @@
 use crate::pty::SessionManager;
+use crate::settings::{self, AppSettings};
 use std::sync::{Arc, Mutex};
 use tauri::State;
 
@@ -99,4 +100,15 @@ pub async fn close_session(
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn get_settings() -> Result<AppSettings, String> {
+    settings::load_settings()
+}
+
+#[tauri::command]
+pub async fn save_app_settings(settings: AppSettings) -> Result<(), String> {
+    settings::validate_settings(&settings)?;
+    settings::save_settings(&settings)
 }

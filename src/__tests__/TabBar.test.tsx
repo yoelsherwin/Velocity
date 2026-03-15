@@ -109,4 +109,23 @@ describe('TabBar', () => {
     fireEvent.click(screen.getByTestId('tab-new-button'));
     expect(onNewTab).toHaveBeenCalledTimes(1);
   });
+
+  it('test_TabBar_has_settings_button', () => {
+    const tabs = makeTabs(1);
+    const onOpenSettings = vi.fn();
+    render(
+      <TabBar
+        tabs={tabs}
+        activeTabId="tab-1"
+        onSelectTab={vi.fn()}
+        onCloseTab={vi.fn()}
+        onNewTab={vi.fn()}
+        onOpenSettings={onOpenSettings}
+      />,
+    );
+    const settingsBtn = screen.getByTestId('settings-button');
+    expect(settingsBtn).toBeInTheDocument();
+    fireEvent.click(settingsBtn);
+    expect(onOpenSettings).toHaveBeenCalledTimes(1);
+  });
 });

@@ -1,6 +1,7 @@
 pub mod ansi;
 mod commands;
 pub mod pty;
+pub mod settings;
 
 use commands::AppState;
 use pty::SessionManager;
@@ -18,6 +19,8 @@ pub fn run() {
             commands::write_to_session,
             commands::resize_session,
             commands::close_session,
+            commands::get_settings,
+            commands::save_app_settings,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

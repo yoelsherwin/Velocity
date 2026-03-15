@@ -6,9 +6,10 @@ interface TabBarProps {
   onSelectTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => void;
   onNewTab: () => void;
+  onOpenSettings?: () => void;
 }
 
-function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onNewTab }: TabBarProps) {
+function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onNewTab, onOpenSettings }: TabBarProps) {
   const showClose = tabs.length > 1;
 
   return (
@@ -46,6 +47,16 @@ function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onNewTab }: TabBar
         onClick={onNewTab}
       >
         +
+      </button>
+      <div className="tab-bar-spacer" />
+      <button
+        className="tab-settings-btn"
+        data-testid="settings-button"
+        onClick={onOpenSettings}
+        title="Settings"
+        aria-label="Settings"
+      >
+        &#9881;
       </button>
     </div>
   );

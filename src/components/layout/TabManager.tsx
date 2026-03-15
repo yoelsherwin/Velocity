@@ -3,6 +3,7 @@ import { Tab, PaneDirection, PaneNode } from '../../lib/types';
 import { splitPane, closePane, countLeaves, getLeafIds, updatePaneRatio } from '../../lib/pane-utils';
 import TabBar from './TabBar';
 import PaneContainer from './PaneContainer';
+import SettingsModal from '../SettingsModal';
 
 const MAX_PANES_TOTAL = 20;
 
@@ -35,6 +36,7 @@ function TabManager() {
   const tabsRef = useRef(tabs);
   const [activeTabId, setActiveTabId] = useState<string>(() => tabs[0].id);
   const activeTabIdRef = useRef(activeTabId);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   // Derive focusedPaneId from the active tab
   const activeTab = tabs.find((t) => t.id === activeTabId);
@@ -225,6 +227,7 @@ function TabManager() {
         onSelectTab={handleSelectTab}
         onCloseTab={handleCloseTab}
         onNewTab={handleNewTab}
+        onOpenSettings={() => setSettingsOpen(true)}
       />
       <div className="tab-content">
         {tabs.map((tab) => (
@@ -246,6 +249,7 @@ function TabManager() {
           </div>
         ))}
       </div>
+      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
     </div>
   );
 }
