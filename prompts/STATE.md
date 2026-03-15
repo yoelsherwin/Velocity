@@ -4,11 +4,40 @@
 > Last updated at: `2026-03-15`
 
 ## Current Phase
-Feature development — Pillars 1-4 COMPLETE. Ready for Pillar 5 (Agent Mode).
+Feature development — Pillar 5 (Agent Mode) in progress.
 
 ## Backlog Position
 Pillar: 5 (Agent Mode)
 Next task number: 015
+
+## Pillar 5 Plan: Agent Mode (3 tasks)
+
+### TASK-015: Settings System + API Key Management
+- Settings data model: provider, API key, model name, endpoint (for Azure)
+- Tauri commands: `save_settings`, `get_settings`
+- Settings persisted to `%LOCALAPPDATA%/Velocity/settings.json`
+- Frontend: Settings modal with provider dropdown, API key input, model selector
+- Providers: OpenAI, Anthropic (Claude), Google (Gemini), Azure OpenAI
+- Gear icon in the tab bar to open settings
+
+### TASK-016: LLM Provider Client (Rust)
+- Rust HTTP client using `reqwest` crate
+- Multi-provider abstraction: trait-based `LlmProvider`
+- Support all 4 providers with their respective API formats
+- System prompt template: "Translate natural language to a {shell_type} command for Windows. CWD: {cwd}. Output ONLY the command, nothing else."
+- Tauri command: `translate_command(input, shell_type, cwd)` → `Result<String, String>`
+- Reads settings to determine which provider/key/model to use
+
+### TASK-017: Agent Mode UI + Intent Classifier
+- Simple heuristic intent classifier: `#` prefix = NL mode, starts with known commands = CLI mode
+- `#` trigger: user types `# find all ts files` → strips `#`, sends to LLM
+- Auto-detect: if input doesn't look like a CLI command, suggest agent mode
+- Loading state while LLM processes (spinner in input area)
+- Generated command populates input editor for review
+- User presses Enter to execute (review-first, never auto-execute)
+- Error states: no API key configured → prompt to open settings, API error → show in output
+
+### Execution order: 015 → 016 → 017
 
 ## Completed Tasks
 
@@ -22,83 +51,53 @@ Next task number: 015
 | TASK-006 | PTY channel refactor + integration tests | `9ccbc42` | APPROVED R1 | N/A | N/A |
 | TASK-007 | E2E tests with Playwright | `37dda08` | N/A | N/A | N/A |
 | TASK-008 | Input editor — multi-line + syntax highlighting | `e1afb70` | APPROVED R2 | N/A | PASS |
-| TASK-009 | Tabbed interface with independent sessions | `21d7967` | APPROVED R2 | N/A | PASS |
-| TASK-010 | Split panes — vertical and horizontal | `f789ab6` | APPROVED R2 | N/A | PASS |
-| FIX-011 | Batch fix for missed findings (QA audit) | `b19111d` | APPROVED R1 | N/A | N/A |
+| TASK-009 | Tabbed interface | `21d7967` | APPROVED R2 | N/A | PASS |
+| TASK-010 | Split panes | `f789ab6` | APPROVED R2 | N/A | PASS |
+| FIX-011 | Batch fix for missed findings | `b19111d` | APPROVED R1 | N/A | N/A |
 | TASK-011 | Ghost text + command history | `525aade` | APPROVED R2 | N/A | N/A |
 | TASK-012 | Exit codes via shell markers | `47dedf8` | APPROVED (R1+fix) | PASS R1 | PASS |
 | TASK-013 | Draggable pane dividers | `8613c86` | APPROVED R1 | PASS R1 | PASS |
 | TASK-014 | Per-tab pane focus | `b99bba1` | APPROVED R1 | PASS R1 | PASS |
-| FIX-012-CR | Exit code regex anchor, PowerShell $? | `7ace1a7` | — | — | — |
-| FIX-012-014-QA | Batch QA cleanup (fixtures, dead code, clamping) | `52217f3` | — | — | — |
-| E2E-expand | E2E tests: exit codes, tabs, panes, editor, lifecycle | `0d0239e`+`2c3a8b0` | — | — | — |
-| FIX-watchdog | Child process watchdog for ConPTY exit detection | `93cb37b` | — | — | — |
-| FIX-012-tests | Exit command marker-skip tests | `a47586c` | — | — | — |
+| TASK-015-E2E | E2E test expansion (21 tests) | `0d0239e` | N/A | N/A | N/A |
+| FIX-watchdog | ConPTY exit detection watchdog | `93cb37b` | N/A | N/A | N/A |
 
 ## In Progress
-None.
+None. TASK-015 and TASK-016 complete. Ready for TASK-017 (Agent Mode UI).
 
 ## Outstanding Issues — Tracked
 
 ### Medium Severity
-- **BUG-004**: Full ANSI re-parse per PTY event (perf). Mitigated by useMemo.
-- **BUG-009**: Rapid shell switching race → orphaned sessions. Bounded by MAX_SESSIONS.
-- **BUG-020**: Welcome block retains `running` status after session close.
-- **BUG-025**: No per-block output size limit.
-- **BUG-033**: Tab close → closeSession fire-and-forget.
-- **BUG-034**: No frontend MAX_SESSIONS enforcement for tabs.
-- **SEC-012-M1**: Marker spoofing — programs can forge `VELOCITY_EXIT:0`. Fix: add per-command nonce.
-- **SEC-012-M2**: PowerShell exit codes limited to 0/1 (uses `$?` not `$LASTEXITCODE`).
-- **CR-002-I4**: UTF-8 lossy conversion splits multi-byte chars across reads.
+- BUG-004, BUG-009, BUG-020, BUG-025, BUG-033, BUG-034
+- SEC-012-M1 (marker spoofing), SEC-012-M2 (PS exit codes 0/1 only)
+- CR-002-I4 (UTF-8 lossy conversion)
 
 ### Low Severity
-- **BUG-010**: Rapid restart clicks orphan sessions.
-- **BUG-028**: Tokenizer misclassifies flag-like filenames after redirects.
-- **BUG-029**: Tokenizer doesn't recognize `;`, `&&`, `||`.
-- **BUG-031**: Overlay scroll desync on long content.
-- **BUG-032**: Disabled state doesn't gate handleKeyDown.
-- **BUG-035**: autoFocus on hidden tabs.
-- **BUG-038**: Ctrl+W preventDefault with 1 tab.
-- **SEC-004-L4**: Drag event listeners could leak on unmount during active drag.
-- **SEC-012-L6**: Exit code regex accepts arbitrarily large integers.
+- BUG-010, 028, 029, 031, 032, 035, 038
+- SEC-004-L4, SEC-012-L6
 
 ### Accepted Risk
-- **SEC-002-H1**: Full parent env inherited by shells (inherent to terminal emulators).
-- **SEC-001-M1**: `unsafe-inline` in style-src CSP (required for React).
-- **SEC-005-M1**: Rerun without confirmation (industry standard, matches Warp).
+- SEC-002-H1, SEC-001-M1, SEC-005-M1
 
 ## Pillar Status
 
-| Pillar | Status | Sub-tasks |
-|--------|--------|-----------|
-| 1. Process Interfacing | **COMPLETE** | PTY spawn, streaming, ANSI filter, lifecycle, shells, ConPTY fix, lazy reader, channel refactor, watchdog |
-| 2. Block Model | **COMPLETE** | Blocks, copy/rerun, exit codes via shell markers |
-| 3. Input Editor | **COMPLETE** | Multi-line, syntax highlighting, ghost text, command history |
-| 4. Structural Layout | **COMPLETE** | Tabs, split panes, drag resize, per-tab focus, keyboard shortcuts |
-| 5. Agent Mode | Not started | Intent classifier, # trigger, LLM bridge, review-first execution |
+| Pillar | Status |
+|--------|--------|
+| 1. Process Interfacing | **COMPLETE** |
+| 2. Block Model | **COMPLETE** |
+| 3. Input Editor | **COMPLETE** |
+| 4. Structural Layout | **COMPLETE** |
+| 5. Agent Mode | **IN PROGRESS** (0/3 tasks) |
 
 ## Test Summary (verified 2026-03-15)
 
-| Layer | Suite | Count | Verified |
-|-------|-------|-------|----------|
-| Unit | Vitest (frontend) | 159 | `npm run test` → 159 passed, 16 files |
-| Unit | cargo test (Rust) | 36 (+1 ignored) | `cargo test` → 36 passed |
-| Integration | Rust PTY (real PowerShell) | 10 | `cargo test` integration → 10 passed |
-| E2E | Playwright (real app + CDP) | 13 | expanded for exit codes, tabs, panes |
-| **Total** | | **218** | |
+| Layer | Suite | Count |
+|-------|-------|-------|
+| Unit | Vitest (frontend) | 159 |
+| Unit | cargo test (Rust) | 36 (+1 ignored) |
+| Integration | Rust PTY (real PowerShell) | 10 |
+| E2E | Playwright | 21 |
+| **Total** | | **226** |
 
 ## Last Security Review
 - Scope: TASKS-012-014 batch
-- Commit range: `65c9f9a..7ace1a7`
 - HEAD at review: `7ace1a7`
-- Report: `prompts/reports/security-reviews/SECURITY-REVIEW-TASKS-012-014-R1.md`
-
-## Notes
-- Current HEAD: `a47586c`
-- App icons generated from custom Velocity logo (`src-tauri/icons/Velocity.png`)
-- npm audit shows 6 `undici` advisories (high) — fixable with `npm audit fix`
-- ConPTY cursor deadlock fixed (write `\x1b[1;1R` on session create)
-- Lazy reader thread (`start_reading`) eliminates emit/listen race
-- StrictMode double-mount handled with invocation counter
-- Shell marker injection for exit codes: PowerShell (`$?`), CMD (`%ERRORLEVEL%`), WSL (`$?`)
-- Child process watchdog detects exit when ConPTY holds pipe open
