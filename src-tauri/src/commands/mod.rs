@@ -115,6 +115,13 @@ pub async fn save_app_settings(settings: AppSettings) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub async fn get_cwd() -> Result<String, String> {
+    std::env::current_dir()
+        .map(|p| p.to_string_lossy().to_string())
+        .map_err(|e| format!("Failed to get CWD: {}", e))
+}
+
+#[tauri::command]
 pub async fn translate_command(
     input: String,
     shell_type: String,
@@ -128,4 +135,15 @@ pub async fn translate_command(
     };
     let response = llm::translate_command(&settings, &request).await?;
     Ok(response.command)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_get_cwd_returns_string() {
+        let cwd = std::env::current_dir();
+        assert!(cwd.is_ok());
+        let cwd_str = cwd.unwrap().to_string_lossy().to_string();
+        assert!(!cwd_str.is_empty());
+    }
 }

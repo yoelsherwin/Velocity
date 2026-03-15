@@ -3,6 +3,9 @@ import { listen } from '@tauri-apps/api/event';
 import { createSession, writeToSession, closeSession, startReading } from '../lib/pty';
 import { SHELL_TYPES, ShellType, Block } from '../lib/types';
 import { extractExitCode, getExitCodeMarker } from '../lib/exit-code-parser';
+import { classifyIntent, stripHashPrefix } from '../lib/intent-classifier';
+import { translateCommand } from '../lib/llm';
+import { getCwd } from '../lib/cwd';
 import BlockView from './blocks/BlockView';
 import InputEditor from './editor/InputEditor';
 import { useCommandHistory } from '../hooks/useCommandHistory';
@@ -35,6 +38,8 @@ function Terminal() {
   const activeBlockIdRef = useRef<string | null>(null);
   const [input, setInput] = useState('');
   const [closed, setClosed] = useState(false);
+  const [agentLoading, setAgentLoading] = useState(false);
+  const [agentError, setAgentError] = useState<string | null>(null);
   const outputRef = useRef<HTMLDivElement>(null);
   const unlistenRefs = useRef<(() => void)[]>([]);
   const startSessionIdRef = useRef(0);
@@ -272,15 +277,44 @@ function Terminal() {
   );
 
   const handleSubmit = useCallback(
-    (cmd: string) => {
+    async (cmd: string) => {
       const trimmed = cmd.trim();
-      if (trimmed) {
-        addCommand(trimmed);
-        submitCommand(trimmed);
+      if (!trimmed) {
+        setInput('');
+        return;
       }
+
+      // Only trigger agent mode on explicit # prefix (MVP)
+      const intent = classifyIntent(trimmed);
+      const hasHashPrefix = trimmed.startsWith('#');
+
+      if (intent === 'natural_language' && hasHashPrefix) {
+        // Agent mode: translate via LLM
+        const nlInput = stripHashPrefix(trimmed);
+        if (!nlInput) {
+          setInput('');
+          return;
+        }
+        setAgentLoading(true);
+        setAgentError(null);
+        try {
+          const cwd = await getCwd().catch(() => 'C:\\');
+          const translated = await translateCommand(nlInput, shellType, cwd);
+          setInput(translated); // Put translated command in the editor for review
+        } catch (err) {
+          setAgentError(String(err));
+        } finally {
+          setAgentLoading(false);
+        }
+        return; // Don't execute — user reviews first
+      }
+
+      // CLI mode: execute normally
+      addCommand(trimmed);
+      submitCommand(trimmed);
       setInput('');
     },
-    [addCommand, submitCommand],
+    [shellType, addCommand, submitCommand],
   );
 
   const handleInputChange = useCallback(
@@ -288,6 +322,8 @@ function Terminal() {
       setInput(newValue);
       setDraft(newValue);
       reset();
+      // Clear agent error when user starts typing
+      setAgentError(null);
     },
     [setDraft, reset],
   );
@@ -350,15 +386,26 @@ function Terminal() {
         </div>
       ) : (
         <div data-testid="terminal-input">
+          {agentLoading && (
+            <div className="agent-loading" data-testid="agent-loading">
+              <span className="agent-spinner">&#x27F3;</span>
+              Translating...
+            </div>
+          )}
           <InputEditor
             value={input}
             onChange={handleInputChange}
             onSubmit={handleSubmit}
-            disabled={closed}
+            disabled={closed || agentLoading}
             ghostText={suggestion}
             onNavigateUp={handleNavigateUp}
             onNavigateDown={handleNavigateDown}
           />
+          {agentError && (
+            <div className="agent-error" data-testid="agent-error">
+              {agentError}
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -23,6 +23,18 @@ vi.mock('@tauri-apps/api/event', () => ({
   listen: (...args: unknown[]) => mockListen(...args),
 }));
 
+const mockTranslateCommand = vi.fn();
+
+vi.mock('../lib/llm', () => ({
+  translateCommand: (...args: unknown[]) => mockTranslateCommand(...args),
+}));
+
+const mockGetCwd = vi.fn();
+
+vi.mock('../lib/cwd', () => ({
+  getCwd: (...args: unknown[]) => mockGetCwd(...args),
+}));
+
 import Terminal, { MAX_BLOCKS } from '../components/Terminal';
 
 describe('Terminal Component', () => {
@@ -41,6 +53,8 @@ describe('Terminal Component', () => {
     mockWriteToSession.mockResolvedValue(undefined);
     mockCloseSession.mockResolvedValue(undefined);
     mockStartReading.mockResolvedValue(undefined);
+    mockTranslateCommand.mockResolvedValue('dir');
+    mockGetCwd.mockResolvedValue('C:\\Users\\test');
   });
 
   it('test_terminal_renders_without_crashing', async () => {
@@ -697,6 +711,184 @@ describe('Terminal Component', () => {
     await waitFor(() => {
       const output = screen.getByTestId('terminal-output');
       expect(output.textContent).toContain('PS C:\\>');
+    });
+  });
+
+  // --- Task 017: Agent Mode tests ---
+
+  it('test_hash_input_triggers_translate', async () => {
+    mockTranslateCommand.mockResolvedValue('Get-ChildItem');
+
+    render(<Terminal />);
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    const textarea = screen.getByTestId('editor-textarea');
+    fireEvent.change(textarea, { target: { value: '# list files' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(mockTranslateCommand).toHaveBeenCalledWith(
+        'list files',
+        'powershell',
+        expect.any(String),
+      );
+    });
+
+    // Input should NOT be cleared — translated command goes into editor for review
+    await waitFor(() => {
+      const ta = screen.getByTestId('editor-textarea') as HTMLTextAreaElement;
+      expect(ta.value).toBe('Get-ChildItem');
+    });
+
+    // writeToSession should NOT have been called (not auto-executed)
+    expect(mockWriteToSession).not.toHaveBeenCalled();
+  });
+
+  it('test_translated_command_populates_input', async () => {
+    mockTranslateCommand.mockResolvedValue('dir /s');
+
+    render(<Terminal />);
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    const textarea = screen.getByTestId('editor-textarea');
+    fireEvent.change(textarea, { target: { value: '# list all files recursively' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    await waitFor(() => {
+      const ta = screen.getByTestId('editor-textarea') as HTMLTextAreaElement;
+      expect(ta.value).toBe('dir /s');
+    });
+  });
+
+  it('test_agent_loading_shown', async () => {
+    // Create a promise that we control to keep translateCommand pending
+    let resolveTranslate!: (value: string) => void;
+    mockTranslateCommand.mockReturnValue(
+      new Promise<string>((resolve) => {
+        resolveTranslate = resolve;
+      }),
+    );
+
+    render(<Terminal />);
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    const textarea = screen.getByTestId('editor-textarea');
+    fireEvent.change(textarea, { target: { value: '# test' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    // Loading indicator should appear while translation is pending
+    await waitFor(() => {
+      expect(screen.getByTestId('agent-loading')).toBeInTheDocument();
+    });
+
+    // Resolve the translation
+    await act(async () => {
+      resolveTranslate('echo test');
+    });
+
+    // Loading indicator should disappear after translation completes
+    await waitFor(() => {
+      expect(screen.queryByTestId('agent-loading')).not.toBeInTheDocument();
+    });
+  });
+
+  it('test_agent_error_shown', async () => {
+    mockTranslateCommand.mockRejectedValue('No API key configured. Open Settings to add one.');
+
+    render(<Terminal />);
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    const textarea = screen.getByTestId('editor-textarea');
+    fireEvent.change(textarea, { target: { value: '# test' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    // Error message should be visible
+    await waitFor(() => {
+      const errorEl = screen.getByTestId('agent-error');
+      expect(errorEl).toBeInTheDocument();
+      expect(errorEl.textContent).toContain('No API key configured');
+    });
+  });
+
+  it('test_agent_error_clears_on_typing', async () => {
+    mockTranslateCommand.mockRejectedValue('API error');
+
+    render(<Terminal />);
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    const textarea = screen.getByTestId('editor-textarea');
+    fireEvent.change(textarea, { target: { value: '# test' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    // Wait for the error to appear
+    await waitFor(() => {
+      expect(screen.getByTestId('agent-error')).toBeInTheDocument();
+    });
+
+    // Start typing — error should clear
+    fireEvent.change(textarea, { target: { value: 'new input' } });
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('agent-error')).not.toBeInTheDocument();
+    });
+  });
+
+  it('test_normal_command_not_translated', async () => {
+    render(<Terminal />);
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    const textarea = screen.getByTestId('editor-textarea');
+    fireEvent.change(textarea, { target: { value: 'dir' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(mockWriteToSession).toHaveBeenCalled();
+    });
+
+    // translateCommand should NOT have been called for a normal CLI command
+    expect(mockTranslateCommand).not.toHaveBeenCalled();
+  });
+
+  it('test_translated_command_executes_on_second_enter', async () => {
+    mockTranslateCommand.mockResolvedValue('Get-ChildItem');
+
+    render(<Terminal />);
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    const textarea = screen.getByTestId('editor-textarea');
+
+    // First: type agent command and press Enter
+    fireEvent.change(textarea, { target: { value: '# list files' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    // Wait for translated command to appear in input
+    await waitFor(() => {
+      const ta = screen.getByTestId('editor-textarea') as HTMLTextAreaElement;
+      expect(ta.value).toBe('Get-ChildItem');
+    });
+
+    // Second: press Enter again to execute the translated command
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(mockWriteToSession).toHaveBeenCalledWith(
+        'test-session-id',
+        expect.stringContaining('Get-ChildItem'),
+      );
     });
   });
 });

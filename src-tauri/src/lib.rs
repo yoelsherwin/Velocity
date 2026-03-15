@@ -22,6 +22,7 @@ pub fn run() {
             commands::close_session,
             commands::get_settings,
             commands::save_app_settings,
+            commands::get_cwd,
             commands::translate_command,
         ])
         .run(tauri::generate_context!())

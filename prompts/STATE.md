@@ -62,7 +62,7 @@ Next task number: 015
 | FIX-watchdog | ConPTY exit detection watchdog | `93cb37b` | N/A | N/A | N/A |
 
 ## In Progress
-None. TASK-015 and TASK-016 complete. Ready for TASK-017 (Agent Mode UI).
+TASK-017: Agent Mode UI — Intent Classifier + Command Translation Flow
 
 ## Outstanding Issues — Tracked
 

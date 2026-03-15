@@ -613,3 +613,38 @@ html, body, #root {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* --- Agent Mode Styles --- */
+
+.agent-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  color: #89b4fa;
+  font-size: 12px;
+  border-bottom: 1px solid #313244;
+}
+
+.agent-spinner {
+  animation: spin 1s linear infinite;
+  display: inline-block;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.agent-error {
+  padding: 4px 8px;
+  color: #f38ba8;
+  font-size: 12px;
+  border-top: 1px solid #313244;
+}
+
+.agent-hint {
+  padding: 2px 8px;
+  color: #585b70;
+  font-size: 11px;
+}
