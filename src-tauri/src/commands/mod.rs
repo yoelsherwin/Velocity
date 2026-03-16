@@ -122,6 +122,46 @@ pub async fn get_cwd() -> Result<String, String> {
 }
 
 #[tauri::command]
+pub async fn get_known_commands() -> Result<Vec<String>, String> {
+    tokio::task::spawn_blocking(|| {
+        let mut commands = Vec::new();
+
+        // 1. Scan PATH directories for executables
+        if let Ok(path_var) = std::env::var("PATH") {
+            for dir in path_var.split(';') {
+                if let Ok(entries) = std::fs::read_dir(dir) {
+                    for entry in entries.flatten() {
+                        if let Some(name) = entry.file_name().to_str() {
+                            // Strip .exe, .cmd, .bat, .ps1 extensions
+                            let base = name.split('.').next().unwrap_or(name).to_lowercase();
+                            if !base.is_empty() {
+                                commands.push(base);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Add common shell builtins
+        let builtins = vec![
+            "cd", "dir", "echo", "set", "cls", "exit", "type", "copy", "move", "del",
+            "mkdir", "rmdir", "ren", "pushd", "popd", "call", "start", "where", "assoc",
+            "ftype", "path", "prompt", "title", "color", "ver", "vol", "pause",
+        ];
+        commands.extend(builtins.iter().map(|s| s.to_string()));
+
+        // 3. Deduplicate
+        commands.sort();
+        commands.dedup();
+
+        Ok(commands)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
 pub async fn translate_command(
     input: String,
     shell_type: String,
@@ -145,5 +185,42 @@ mod tests {
         assert!(cwd.is_ok());
         let cwd_str = cwd.unwrap().to_string_lossy().to_string();
         assert!(!cwd_str.is_empty());
+    }
+
+    #[test]
+    fn test_get_known_commands_returns_nonempty() {
+        // Directly test the logic used in get_known_commands without the Tauri runtime
+        let mut commands = Vec::new();
+
+        if let Ok(path_var) = std::env::var("PATH") {
+            for dir in path_var.split(';') {
+                if let Ok(entries) = std::fs::read_dir(dir) {
+                    for entry in entries.flatten() {
+                        if let Some(name) = entry.file_name().to_str() {
+                            let base = name.split('.').next().unwrap_or(name).to_lowercase();
+                            if !base.is_empty() {
+                                commands.push(base);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        let builtins = vec![
+            "cd", "dir", "echo", "set", "cls", "exit", "type", "copy", "move", "del",
+            "mkdir", "rmdir", "ren", "pushd", "popd", "call", "start", "where", "assoc",
+            "ftype", "path", "prompt", "title", "color", "ver", "vol", "pause",
+        ];
+        commands.extend(builtins.iter().map(|s| s.to_string()));
+
+        commands.sort();
+        commands.dedup();
+
+        assert!(!commands.is_empty(), "Known commands list should not be empty");
+        // Should contain at least some builtins
+        assert!(commands.contains(&"cd".to_string()), "Should contain 'cd' builtin");
+        assert!(commands.contains(&"echo".to_string()), "Should contain 'echo' builtin");
+        assert!(commands.contains(&"dir".to_string()), "Should contain 'dir' builtin");
     }
 }

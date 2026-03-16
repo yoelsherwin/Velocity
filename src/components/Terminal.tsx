@@ -3,9 +3,10 @@ import { listen } from '@tauri-apps/api/event';
 import { createSession, writeToSession, closeSession, startReading } from '../lib/pty';
 import { SHELL_TYPES, ShellType, Block } from '../lib/types';
 import { extractExitCode, getExitCodeMarker } from '../lib/exit-code-parser';
-import { classifyIntent, stripHashPrefix } from '../lib/intent-classifier';
+import { classifyIntent, stripHashPrefix, ClassificationResult } from '../lib/intent-classifier';
 import { translateCommand } from '../lib/llm';
 import { getCwd } from '../lib/cwd';
+import { useKnownCommands } from '../hooks/useKnownCommands';
 import BlockView from './blocks/BlockView';
 import InputEditor from './editor/InputEditor';
 import { useCommandHistory } from '../hooks/useCommandHistory';
@@ -44,6 +45,11 @@ function Terminal() {
   const outputRef = useRef<HTMLDivElement>(null);
   const unlistenRefs = useRef<(() => void)[]>([]);
   const startSessionIdRef = useRef(0);
+
+  // Intent classifier state
+  const [inputMode, setInputMode] = useState<ClassificationResult>({ intent: 'cli', confidence: 'high' });
+  const [modeOverride, setModeOverride] = useState(false);
+  const knownCommands = useKnownCommands();
 
   const { history, addCommand, navigateUp, navigateDown, reset, setDraft } = useCommandHistory();
   const { suggestion } = useGhostText(input, history);
@@ -290,13 +296,11 @@ function Terminal() {
         return;
       }
 
-      // Only trigger agent mode on explicit # prefix (MVP)
-      const intent = classifyIntent(trimmed);
-      const hasHashPrefix = trimmed.startsWith('#');
-
-      if (intent === 'natural_language' && hasHashPrefix) {
+      // Use inputMode.intent to determine routing (replaces hardcoded hasHashPrefix check)
+      if (inputMode.intent === 'natural_language') {
         // Agent mode: translate via LLM
-        const nlInput = stripHashPrefix(trimmed);
+        // Strip # prefix if present (backward compatible)
+        const nlInput = trimmed.startsWith('#') ? stripHashPrefix(trimmed) : trimmed;
         if (!nlInput) {
           setInput('');
           return;
@@ -310,6 +314,9 @@ function Terminal() {
           // Discard stale translation if user switched shells or reset while in-flight
           if (translationIdRef.current !== thisTranslation) return;
           setInput(translated); // Put translated command in the editor for review
+          // After translation populates, reset override so auto-detect kicks in on next input
+          setModeOverride(false);
+          setInputMode({ intent: 'cli', confidence: 'high' });
         } catch (err) {
           // Discard stale error if user switched shells or reset while in-flight
           if (translationIdRef.current !== thisTranslation) return;
@@ -326,8 +333,11 @@ function Terminal() {
       addCommand(trimmed);
       submitCommand(trimmed);
       setInput('');
+      // Reset mode override after submit
+      setModeOverride(false);
+      setInputMode({ intent: 'cli', confidence: 'high' });
     },
-    [shellType, addCommand, submitCommand],
+    [shellType, addCommand, submitCommand, inputMode],
   );
 
   const handleInputChange = useCallback(
@@ -337,9 +347,21 @@ function Terminal() {
       reset();
       // Clear agent error when user starts typing
       setAgentError(null);
+      // Auto-classify on input change (unless user has manually overridden)
+      if (!modeOverride) {
+        setInputMode(classifyIntent(newValue, knownCommands));
+      }
     },
-    [setDraft, reset],
+    [setDraft, reset, modeOverride, knownCommands],
   );
+
+  const handleToggleMode = useCallback(() => {
+    setInputMode(prev => ({
+      intent: prev.intent === 'cli' ? 'natural_language' : 'cli',
+      confidence: 'high',
+    }));
+    setModeOverride(true);
+  }, []);
 
   const handleNavigateUp = useCallback(() => {
     setDraft(input);
@@ -413,6 +435,8 @@ function Terminal() {
             ghostText={suggestion}
             onNavigateUp={handleNavigateUp}
             onNavigateDown={handleNavigateDown}
+            mode={inputMode}
+            onToggleMode={handleToggleMode}
           />
           {agentError && (
             <div className="agent-error" data-testid="agent-error">

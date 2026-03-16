@@ -648,3 +648,41 @@ html, body, #root {
   color: #585b70;
   font-size: 11px;
 }
+
+/* --- Mode Indicator Styles --- */
+
+.mode-indicator {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid #313244;
+  background: transparent;
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  transition: all 0.15s;
+  margin-right: 6px;
+  flex-shrink: 0;
+}
+
+.mode-indicator:hover {
+  background: #313244;
+}
+
+.mode-indicator-cli {
+  color: #a6adc8;
+  border-color: #313244;
+}
+
+.mode-indicator-ai {
+  color: #89b4fa;
+  border-color: #89b4fa;
+}
+
+.mode-indicator-uncertain {
+  opacity: 0.6;
+}

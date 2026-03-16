@@ -35,6 +35,12 @@ vi.mock('../lib/cwd', () => ({
   getCwd: (...args: unknown[]) => mockGetCwd(...args),
 }));
 
+const mockInvoke = vi.fn();
+
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: (...args: unknown[]) => mockInvoke(...args),
+}));
+
 import Terminal, { MAX_BLOCKS } from '../components/Terminal';
 
 describe('Terminal Component', () => {
@@ -55,6 +61,13 @@ describe('Terminal Component', () => {
     mockStartReading.mockResolvedValue(undefined);
     mockTranslateCommand.mockResolvedValue('dir');
     mockGetCwd.mockResolvedValue('C:\\Users\\test');
+    // Mock get_known_commands to return a set of known commands
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_known_commands') {
+        return Promise.resolve(['git', 'dir', 'echo', 'npm', 'docker', 'kubectl', 'cd', 'cls', 'find']);
+      }
+      return Promise.reject(`Unknown command: ${cmd}`);
+    });
   });
 
   it('test_terminal_renders_without_crashing', async () => {
@@ -115,13 +128,14 @@ describe('Terminal Component', () => {
 
     const textarea = screen.getByTestId('editor-textarea');
     // Simulate a multi-line command (as produced by Shift+Enter)
-    fireEvent.change(textarea, { target: { value: 'line1\nline2\nline3' } });
+    // Uses a known command (echo) so the classifier identifies it as CLI
+    fireEvent.change(textarea, { target: { value: 'echo line1\necho line2\necho line3' } });
     fireEvent.keyDown(textarea, { key: 'Enter' });
 
     await waitFor(() => {
       expect(mockWriteToSession).toHaveBeenCalledWith(
         'test-session-id',
-        'line1\rline2\rline3; if ($?) { Write-Output "VELOCITY_EXIT:0" } else { Write-Output "VELOCITY_EXIT:1" }\r',
+        'echo line1\recho line2\recho line3; if ($?) { Write-Output "VELOCITY_EXIT:0" } else { Write-Output "VELOCITY_EXIT:1" }\r',
       );
     });
   });
@@ -889,6 +903,168 @@ describe('Terminal Component', () => {
         'test-session-id',
         expect.stringContaining('Get-ChildItem'),
       );
+    });
+  });
+
+  // --- Task 018: Intent Classifier + Mode Indicator tests ---
+
+  it('test_mode_indicator_visible', async () => {
+    render(<Terminal />);
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    // Mode indicator should be in the DOM
+    await waitFor(() => {
+      expect(screen.getByTestId('mode-indicator')).toBeInTheDocument();
+    });
+  });
+
+  it('test_auto_detects_nl', async () => {
+    render(<Terminal />);
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    const textarea = screen.getByTestId('editor-textarea');
+    fireEvent.change(textarea, { target: { value: 'show me all the log files' } });
+
+    // Mode indicator should show AI
+    await waitFor(() => {
+      const indicator = screen.getByTestId('mode-indicator');
+      expect(indicator.textContent).toContain('AI');
+    });
+  });
+
+  it('test_auto_detects_cli', async () => {
+    render(<Terminal />);
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    // Wait for known commands to load
+    await waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith('get_known_commands');
+    });
+
+    const textarea = screen.getByTestId('editor-textarea');
+    fireEvent.change(textarea, { target: { value: 'git status' } });
+
+    // Mode indicator should show CLI
+    await waitFor(() => {
+      const indicator = screen.getByTestId('mode-indicator');
+      expect(indicator.textContent).toContain('CLI');
+      expect(indicator.textContent).not.toContain('AI');
+    });
+  });
+
+  it('test_toggle_overrides', async () => {
+    render(<Terminal />);
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    const textarea = screen.getByTestId('editor-textarea');
+    // Type NL-looking text to get AI mode
+    fireEvent.change(textarea, { target: { value: 'show me all the log files' } });
+
+    await waitFor(() => {
+      const indicator = screen.getByTestId('mode-indicator');
+      expect(indicator.textContent).toContain('AI');
+    });
+
+    // Click toggle to override to CLI
+    const indicator = screen.getByTestId('mode-indicator');
+    fireEvent.click(indicator);
+
+    await waitFor(() => {
+      const ind = screen.getByTestId('mode-indicator');
+      expect(ind.textContent).toContain('CLI');
+      expect(ind.textContent).not.toContain('AI');
+    });
+
+    // Type more — should stay CLI because override is active
+    fireEvent.change(textarea, { target: { value: 'show me all the log files and more stuff' } });
+
+    await waitFor(() => {
+      const ind = screen.getByTestId('mode-indicator');
+      expect(ind.textContent).toContain('CLI');
+      expect(ind.textContent).not.toContain('AI');
+    });
+  });
+
+  it('test_submit_resets_override', async () => {
+    render(<Terminal />);
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    const textarea = screen.getByTestId('editor-textarea');
+
+    // Type something and toggle to AI
+    fireEvent.change(textarea, { target: { value: 'dir' } });
+
+    const indicator = screen.getByTestId('mode-indicator');
+    // Toggle to get to NL mode
+    fireEvent.click(indicator);
+
+    await waitFor(() => {
+      const ind = screen.getByTestId('mode-indicator');
+      expect(ind.textContent).toContain('AI');
+    });
+
+    // Now we need to submit as NL — but since it's in NL mode now,
+    // it'll try to translate. We need to make sure translateCommand
+    // resolves so the flow completes
+    mockTranslateCommand.mockResolvedValue('Get-ChildItem');
+
+    // Submit (this triggers NL mode translation since we toggled to AI)
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    // After the translation populates the input, the override should be reset.
+    // Type a new CLI command to confirm auto-detection works again
+    await waitFor(() => {
+      const ta = screen.getByTestId('editor-textarea') as HTMLTextAreaElement;
+      expect(ta.value).toBe('Get-ChildItem');
+    });
+
+    // Now execute the translated command (second Enter)
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(mockWriteToSession).toHaveBeenCalled();
+    });
+
+    // After submit, mode should reset back to auto-detect (CLI for empty input)
+    await waitFor(() => {
+      const ind = screen.getByTestId('mode-indicator');
+      expect(ind.textContent).toContain('CLI');
+    });
+  });
+
+  it('test_nl_mode_triggers_translate', async () => {
+    mockTranslateCommand.mockResolvedValue('Get-Process');
+
+    render(<Terminal />);
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    const textarea = screen.getByTestId('editor-textarea');
+    // Type NL text that auto-detects as natural language
+    fireEvent.change(textarea, { target: { value: 'show me all the running processes' } });
+
+    // Verify it's in NL mode
+    await waitFor(() => {
+      const indicator = screen.getByTestId('mode-indicator');
+      expect(indicator.textContent).toContain('AI');
+    });
+
+    // Submit — should trigger translate
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(mockTranslateCommand).toHaveBeenCalled();
     });
   });
 });

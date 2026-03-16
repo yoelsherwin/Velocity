@@ -1,5 +1,7 @@
 import { useMemo, useCallback, useRef } from 'react';
 import { tokenize } from '../../lib/shell-tokenizer';
+import { ClassificationResult } from '../../lib/intent-classifier';
+import ModeIndicator from './ModeIndicator';
 
 interface InputEditorProps {
   value: string;
@@ -9,9 +11,11 @@ interface InputEditorProps {
   ghostText?: string | null;
   onNavigateUp?: () => void;
   onNavigateDown?: () => void;
+  mode?: ClassificationResult;
+  onToggleMode?: () => void;
 }
 
-function InputEditor({ value, onChange, onSubmit, disabled, ghostText, onNavigateUp, onNavigateDown }: InputEditorProps) {
+function InputEditor({ value, onChange, onSubmit, disabled, ghostText, onNavigateUp, onNavigateDown, mode, onToggleMode }: InputEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const tokens = useMemo(() => tokenize(value), [value]);
@@ -72,6 +76,14 @@ function InputEditor({ value, onChange, onSubmit, disabled, ghostText, onNavigat
 
   return (
     <div className="input-editor" data-testid="input-editor">
+      {mode && onToggleMode && (
+        <ModeIndicator
+          intent={mode.intent}
+          confidence={mode.confidence}
+          onToggle={onToggleMode}
+          disabled={disabled}
+        />
+      )}
       <span className="editor-prompt">{'\u276F'}</span>
       <div className="editor-area">
         <pre className="editor-highlight" aria-hidden="true">
