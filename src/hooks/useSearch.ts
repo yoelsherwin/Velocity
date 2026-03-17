@@ -92,10 +92,16 @@ export function useSearch(blocks: Block[]): UseSearchResult {
           startOffset: idx,
           length: debouncedQuery.length,
         });
-        pos = idx + 1; // Allow overlapping matches
+        pos = idx + searchQuery.length; // Non-overlapping matches (matches VS Code/Chrome behavior)
       }
 
       if (result.length >= MAX_MATCHES) break;
+    }
+
+    // Prune stale cache entries for blocks that have been evicted
+    const currentIds = new Set(blocks.map(b => b.id));
+    for (const key of strippedCacheRef.current.keys()) {
+      if (!currentIds.has(key)) strippedCacheRef.current.delete(key);
     }
 
     return result;
@@ -145,6 +151,7 @@ export function useSearch(blocks: Block[]): UseSearchResult {
   }, []);
 
   const close = useCallback(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
     setIsOpen(false);
     setQuery('');
     setDebouncedQuery('');

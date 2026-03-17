@@ -391,6 +391,9 @@ function Terminal() {
     }
   }, [navigateDown]);
 
+  // Ref for the search input element, passed to SearchBar
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
   // Ctrl+Shift+F keyboard handler for search
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -398,8 +401,7 @@ function Terminal() {
         e.preventDefault();
         if (search.isOpen) {
           // Re-focus the search input
-          const searchInput = document.querySelector('.search-input') as HTMLInputElement;
-          searchInput?.focus();
+          searchInputRef.current?.focus();
         } else {
           search.open();
         }
@@ -408,20 +410,23 @@ function Terminal() {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [search]);
+  }, [search.isOpen, search.open]);
+
+  // Ref for the editor textarea, used to return focus on search close
+  const editorRef = useRef<HTMLTextAreaElement>(null);
 
   // When search closes, return focus to the InputEditor
   const handleSearchClose = useCallback(() => {
     search.close();
     // Return focus to the editor textarea
-    const textarea = document.querySelector('[data-testid="editor-textarea"]') as HTMLTextAreaElement;
-    textarea?.focus();
-  }, [search]);
+    editorRef.current?.focus();
+  }, [search.close]);
 
   // Scroll to current match when it changes
   useEffect(() => {
     if (search.currentMatchIndex < 0 || search.matches.length === 0) return;
 
+    let innerTimer: ReturnType<typeof setTimeout>;
     // Use a short delay to allow the DOM to render highlights
     const timer = setTimeout(() => {
       const currentEl = document.querySelector('.search-highlight-current[data-match-current="true"]');
@@ -437,7 +442,7 @@ function Terminal() {
           if (blockIndex >= 0 && blockContainers[blockIndex]) {
             blockContainers[blockIndex].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
             // After scroll, try again to find the highlight element
-            setTimeout(() => {
+            innerTimer = setTimeout(() => {
               const el = document.querySelector('.search-highlight-current[data-match-current="true"]');
               el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
             }, 200);
@@ -446,7 +451,7 @@ function Terminal() {
       }
     }, 50);
 
-    return () => clearTimeout(timer);
+    return () => { clearTimeout(timer); clearTimeout(innerTimer); };
   }, [search.currentMatchIndex, search.matches, blocks]);
 
   // Compute highlights for each block, only for visible blocks
@@ -507,6 +512,7 @@ function Terminal() {
           goToPrev={search.goToPrev}
           isOpen={search.isOpen}
           onClose={handleSearchClose}
+          inputRef={searchInputRef}
         />
         {blocks.map((block) => (
           <BlockView
@@ -549,6 +555,7 @@ function Terminal() {
             onNavigateDown={handleNavigateDown}
             mode={inputMode}
             onToggleMode={handleToggleMode}
+            textareaRef={editorRef}
           />
           {agentError && (
             <div className="agent-error" data-testid="agent-error">

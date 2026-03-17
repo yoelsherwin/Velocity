@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, type RefObject } from 'react';
 
 interface SearchBarProps {
   query: string;
@@ -11,6 +11,7 @@ interface SearchBarProps {
   goToPrev: () => void;
   isOpen: boolean;
   onClose: () => void;
+  inputRef?: RefObject<HTMLInputElement | null>;
 }
 
 function SearchBar({
@@ -24,8 +25,10 @@ function SearchBar({
   goToPrev,
   isOpen,
   onClose,
+  inputRef: externalRef,
 }: SearchBarProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const internalRef = useRef<HTMLInputElement>(null);
+  const inputRef = externalRef || internalRef;
 
   // Auto-focus when opened
   useEffect(() => {
@@ -69,6 +72,8 @@ function SearchBar({
       counterText = 'No results';
     } else if (matchCount > 10_000) {
       counterText = '10,000+ matches';
+    } else if (currentMatchIndex === -1) {
+      counterText = `${matchCount} matches`;
     } else {
       counterText = `${currentMatchIndex + 1} of ${matchCount}`;
     }

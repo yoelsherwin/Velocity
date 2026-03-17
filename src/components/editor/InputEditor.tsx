@@ -1,4 +1,4 @@
-import { useMemo, useCallback, useRef } from 'react';
+import { useMemo, useCallback, useRef, type RefObject } from 'react';
 import { tokenize } from '../../lib/shell-tokenizer';
 import { ClassificationResult } from '../../lib/intent-classifier';
 import ModeIndicator from './ModeIndicator';
@@ -13,10 +13,12 @@ interface InputEditorProps {
   onNavigateDown?: () => void;
   mode?: ClassificationResult;
   onToggleMode?: () => void;
+  textareaRef?: RefObject<HTMLTextAreaElement | null>;
 }
 
-function InputEditor({ value, onChange, onSubmit, disabled, ghostText, onNavigateUp, onNavigateDown, mode, onToggleMode }: InputEditorProps) {
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+function InputEditor({ value, onChange, onSubmit, disabled, ghostText, onNavigateUp, onNavigateDown, mode, onToggleMode, textareaRef: externalRef }: InputEditorProps) {
+  const internalRef = useRef<HTMLTextAreaElement>(null);
+  const textareaRef = externalRef || internalRef;
 
   const tokens = useMemo(() => tokenize(value), [value]);
 

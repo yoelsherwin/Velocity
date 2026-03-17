@@ -179,5 +179,15 @@ export default React.memo(AnsiOutput, (prev, next) => {
   const prevEmpty = !prev.highlights || prev.highlights.length === 0;
   const nextEmpty = !next.highlights || next.highlights.length === 0;
   if (prevEmpty && nextEmpty) return true;
-  return false; // Different highlights — re-render
+  if (prevEmpty !== nextEmpty) return false;
+  // Shallow comparison of highlight elements
+  const prevH = prev.highlights!;
+  const nextH = next.highlights!;
+  if (prevH.length !== nextH.length) return false;
+  for (let i = 0; i < prevH.length; i++) {
+    if (prevH[i].startOffset !== nextH[i].startOffset
+      || prevH[i].length !== nextH[i].length
+      || prevH[i].isCurrent !== nextH[i].isCurrent) return false;
+  }
+  return true;
 });
