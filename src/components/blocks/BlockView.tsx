@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo } from 'react';
 import { Block } from '../../lib/types';
 import { stripAnsi } from '../../lib/ansi';
-import AnsiOutput from '../AnsiOutput';
+import AnsiOutput, { HighlightRange } from '../AnsiOutput';
 import { estimateBlockHeight } from '../../hooks/useBlockVisibility';
 
 interface BlockViewProps {
@@ -10,9 +10,10 @@ interface BlockViewProps {
   onRerun: (command: string) => void;
   isVisible?: boolean;      // true if block is in or near the viewport
   observeRef?: (el: HTMLDivElement | null) => void;  // callback ref for IntersectionObserver
+  highlights?: HighlightRange[];  // search match highlights for this block
 }
 
-function BlockView({ block, isActive, onRerun, isVisible = true, observeRef }: BlockViewProps) {
+function BlockView({ block, isActive, onRerun, isVisible = true, observeRef, highlights }: BlockViewProps) {
   const formattedTime = useMemo(() => {
     return new Date(block.timestamp).toLocaleTimeString();
   }, [block.timestamp]);
@@ -66,7 +67,7 @@ function BlockView({ block, isActive, onRerun, isVisible = true, observeRef }: B
       {block.output && (
         isVisible ? (
           <pre className="block-output" data-testid="block-output">
-            <AnsiOutput text={block.output} />
+            <AnsiOutput text={block.output} highlights={highlights} />
           </pre>
         ) : (
           <pre

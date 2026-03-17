@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { createSession, writeToSession, closeSession, startReading } from '../lib/pty';
 import { SHELL_TYPES, ShellType, Block } from '../lib/types';
@@ -9,9 +9,12 @@ import { getCwd } from '../lib/cwd';
 import { useKnownCommands } from '../hooks/useKnownCommands';
 import BlockView from './blocks/BlockView';
 import InputEditor from './editor/InputEditor';
+import SearchBar from './SearchBar';
 import { useCommandHistory } from '../hooks/useCommandHistory';
 import { useGhostText } from '../hooks/useGhostText';
 import { useBlockVisibility } from '../hooks/useBlockVisibility';
+import { useSearch } from '../hooks/useSearch';
+import { HighlightRange } from './AnsiOutput';
 
 export const MAX_BLOCKS = 500;
 export const OUTPUT_LIMIT_PER_BLOCK = 500_000;
@@ -58,6 +61,7 @@ function Terminal() {
   const { history, addCommand, navigateUp, navigateDown, reset, setDraft } = useCommandHistory();
   const { suggestion } = useGhostText(input, history);
   const { visibleIds, observeBlock } = useBlockVisibility();
+  const search = useSearch(blocks);
 
   const updateSessionId = useCallback((id: string | null) => {
     sessionIdRef.current = id;
@@ -387,6 +391,90 @@ function Terminal() {
     }
   }, [navigateDown]);
 
+  // Ctrl+Shift+F keyboard handler for search
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.shiftKey && (e.key === 'f' || e.key === 'F')) {
+        e.preventDefault();
+        if (search.isOpen) {
+          // Re-focus the search input
+          const searchInput = document.querySelector('.search-input') as HTMLInputElement;
+          searchInput?.focus();
+        } else {
+          search.open();
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [search]);
+
+  // When search closes, return focus to the InputEditor
+  const handleSearchClose = useCallback(() => {
+    search.close();
+    // Return focus to the editor textarea
+    const textarea = document.querySelector('[data-testid="editor-textarea"]') as HTMLTextAreaElement;
+    textarea?.focus();
+  }, [search]);
+
+  // Scroll to current match when it changes
+  useEffect(() => {
+    if (search.currentMatchIndex < 0 || search.matches.length === 0) return;
+
+    // Use a short delay to allow the DOM to render highlights
+    const timer = setTimeout(() => {
+      const currentEl = document.querySelector('.search-highlight-current[data-match-current="true"]');
+      if (currentEl) {
+        currentEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      } else {
+        // The block might be off-screen (placeholder). Scroll the block container into view first.
+        const match = search.matches[search.currentMatchIndex];
+        if (match) {
+          const blockContainers = document.querySelectorAll('[data-testid="block-container"]');
+          // Find the matching block container
+          const blockIndex = blocks.findIndex(b => b.id === match.blockId);
+          if (blockIndex >= 0 && blockContainers[blockIndex]) {
+            blockContainers[blockIndex].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            // After scroll, try again to find the highlight element
+            setTimeout(() => {
+              const el = document.querySelector('.search-highlight-current[data-match-current="true"]');
+              el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            }, 200);
+          }
+        }
+      }
+    }, 50);
+
+    return () => clearTimeout(timer);
+  }, [search.currentMatchIndex, search.matches, blocks]);
+
+  // Compute highlights for each block, only for visible blocks
+  const blockHighlights = useMemo((): Map<string, HighlightRange[]> => {
+    if (!search.isOpen || search.matches.length === 0) return new Map();
+
+    const result = new Map<string, HighlightRange[]>();
+    const currentMatch = search.currentMatchIndex >= 0
+      ? search.matches[search.currentMatchIndex]
+      : null;
+
+    for (const [blockId, blockMatches] of search.matchesByBlock) {
+      // Only compute highlights for visible blocks
+      if (!visibleIds.has(blockId)) continue;
+
+      const highlights: HighlightRange[] = blockMatches.map((m) => ({
+        startOffset: m.startOffset,
+        length: m.length,
+        isCurrent: currentMatch !== null
+          && m.blockId === currentMatch.blockId
+          && m.startOffset === currentMatch.startOffset,
+      }));
+      result.set(blockId, highlights);
+    }
+
+    return result;
+  }, [search.isOpen, search.matches, search.matchesByBlock, search.currentMatchIndex, visibleIds]);
+
   return (
     <div className="terminal-container">
       <div className="shell-selector" role="tablist" data-testid="shell-selector">
@@ -408,6 +496,18 @@ function Terminal() {
         className="terminal-output"
         data-testid="terminal-output"
       >
+        <SearchBar
+          query={search.query}
+          setQuery={search.setQuery}
+          caseSensitive={search.caseSensitive}
+          setCaseSensitive={search.setCaseSensitive}
+          matchCount={search.matches.length}
+          currentMatchIndex={search.currentMatchIndex}
+          goToNext={search.goToNext}
+          goToPrev={search.goToPrev}
+          isOpen={search.isOpen}
+          onClose={handleSearchClose}
+        />
         {blocks.map((block) => (
           <BlockView
             key={block.id}
@@ -416,6 +516,7 @@ function Terminal() {
             onRerun={handleRerun}
             isVisible={visibleIds.has(block.id)}
             observeRef={(el) => observeBlock(block.id, el)}
+            highlights={blockHighlights.get(block.id)}
           />
         ))}
         {closed && <div className="block-process-exited">[Process exited]</div>}

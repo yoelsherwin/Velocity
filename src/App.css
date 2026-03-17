@@ -686,3 +686,128 @@ html, body, #root {
 .mode-indicator-uncertain {
   opacity: 0.6;
 }
+
+/* --- Search Bar Styles --- */
+
+.search-bar {
+  position: sticky;
+  top: 0;
+  right: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  background-color: #313244;
+  border: 1px solid #45475a;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  margin-left: auto;
+  width: fit-content;
+  float: right;
+}
+
+.search-input {
+  width: 200px;
+  padding: 4px 8px;
+  border: 1px solid #45475a;
+  border-radius: 4px;
+  background-color: #1e1e2e;
+  color: #cdd6f4;
+  font-family: 'Cascadia Code', 'Consolas', 'Courier New', monospace;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.search-input:focus {
+  border-color: #89b4fa;
+}
+
+.search-input::placeholder {
+  color: #585b70;
+}
+
+.search-match-count {
+  color: #a6adc8;
+  font-size: 12px;
+  white-space: nowrap;
+  padding: 0 4px;
+  min-width: 60px;
+  text-align: center;
+}
+
+.search-nav-btn {
+  padding: 2px 6px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: #a6adc8;
+  font-size: 10px;
+  cursor: pointer;
+  line-height: 1;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.search-nav-btn:hover:not(:disabled) {
+  background-color: #45475a;
+  color: #cdd6f4;
+}
+
+.search-nav-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.search-case-btn {
+  padding: 2px 6px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: transparent;
+  color: #a6adc8;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.search-case-btn:hover {
+  background-color: #45475a;
+  color: #cdd6f4;
+}
+
+.search-case-btn-active {
+  color: #89b4fa;
+  border-color: #89b4fa;
+  background-color: rgba(137, 180, 250, 0.1);
+}
+
+.search-close-btn {
+  padding: 2px 6px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: #a6adc8;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.search-close-btn:hover {
+  background-color: #45475a;
+  color: #f38ba8;
+}
+
+/* --- Search Highlight Styles --- */
+
+.search-highlight {
+  background-color: rgba(249, 226, 175, 0.3);
+  border-radius: 1px;
+}
+
+.search-highlight-current {
+  background-color: rgba(249, 226, 175, 0.7);
+  outline: 1px solid #f9e2af;
+  border-radius: 1px;
+}

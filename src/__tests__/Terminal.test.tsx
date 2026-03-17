@@ -1067,4 +1067,94 @@ describe('Terminal Component', () => {
       expect(mockTranslateCommand).toHaveBeenCalled();
     });
   });
+
+  // --- Task 020: Find in Output tests ---
+
+  it('test_ctrl_shift_f_opens_search_bar', async () => {
+    render(<Terminal />);
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    // Press Ctrl+Shift+F
+    fireEvent.keyDown(document, { key: 'f', ctrlKey: true, shiftKey: true });
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('Find in output...')).toBeInTheDocument();
+    });
+  });
+
+  it('test_search_highlights_appear_in_block_output', async () => {
+    render(<Terminal />);
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    // Simulate output in the welcome block
+    await act(async () => {
+      const outputCallback = eventListeners['pty:output:test-session-id'];
+      if (outputCallback) {
+        outputCallback({ payload: 'hello world hello' });
+      }
+    });
+
+    // Open search
+    fireEvent.keyDown(document, { key: 'f', ctrlKey: true, shiftKey: true });
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('Find in output...')).toBeInTheDocument();
+    });
+
+    // Type search query
+    const searchInput = screen.getByPlaceholderText('Find in output...');
+    fireEvent.change(searchInput, { target: { value: 'hello' } });
+
+    // Wait for debounce + highlights to appear
+    await waitFor(() => {
+      const highlights = document.querySelectorAll('.search-highlight');
+      expect(highlights.length).toBeGreaterThanOrEqual(1);
+    }, { timeout: 500 });
+  });
+
+  it('test_escape_closes_search_and_clears_highlights', async () => {
+    render(<Terminal />);
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    // Simulate output
+    await act(async () => {
+      const outputCallback = eventListeners['pty:output:test-session-id'];
+      if (outputCallback) {
+        outputCallback({ payload: 'hello world hello' });
+      }
+    });
+
+    // Open search
+    fireEvent.keyDown(document, { key: 'f', ctrlKey: true, shiftKey: true });
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('Find in output...')).toBeInTheDocument();
+    });
+
+    // Type search query
+    const searchInput = screen.getByPlaceholderText('Find in output...');
+    fireEvent.change(searchInput, { target: { value: 'hello' } });
+
+    await waitFor(() => {
+      const highlights = document.querySelectorAll('.search-highlight');
+      expect(highlights.length).toBeGreaterThanOrEqual(1);
+    }, { timeout: 500 });
+
+    // Press Escape
+    fireEvent.keyDown(searchInput, { key: 'Escape' });
+
+    await waitFor(() => {
+      expect(screen.queryByPlaceholderText('Find in output...')).not.toBeInTheDocument();
+    });
+
+    // Highlights should be cleared
+    const highlights = document.querySelectorAll('.search-highlight');
+    expect(highlights.length).toBe(0);
+  });
 });
