@@ -91,4 +91,74 @@ describe('useIncrementalAnsi', () => {
     // Empty input should return empty array
     expect(result.current).toEqual([]);
   });
+
+  it('test_incremental_reparse_on_truncation_with_marker', () => {
+    // Simulate a large output that will be front-truncated with a marker.
+    // The key scenario: output starts large, then gets replaced with
+    // "[Truncated]\nXYZ..." — the hook must do a full reparse, not return
+    // stale accumulated spans.
+    const marker = '[Output truncated \u2014 showing last 500KB]\n';
+    const originalContent = 'A'.repeat(1000);
+    const truncatedTail = 'XYZ' + 'B'.repeat(500);
+
+    // Phase 1: initial large output
+    const { result, rerender } = renderHook(
+      ({ output }) => useIncrementalAnsi(output),
+      { initialProps: { output: originalContent } },
+    );
+
+    const phase1Spans = result.current;
+    const phase1Content = phase1Spans.map((s) => s.content).join('');
+    expect(phase1Content).toBe(originalContent);
+
+    // Phase 2: front-truncation — output is replaced with marker + tail
+    const truncatedOutput = marker + truncatedTail;
+    rerender({ output: truncatedOutput });
+
+    const phase2Spans = result.current;
+    const phase2Content = phase2Spans.map((s) => s.content).join('');
+
+    // Spans must match a fresh parseAnsi of the truncated output
+    const freshSpans = parseAnsi(truncatedOutput);
+    const freshContent = freshSpans.map((s) => s.content).join('');
+
+    expect(phase2Content).toBe(freshContent);
+    expect(phase2Spans.length).toBe(freshSpans.length);
+  });
+
+  it('test_incremental_reparse_on_steady_state_truncation', () => {
+    // Simulate the steady-state truncation scenario where the marker is already
+    // present and repeated truncations produce same-length output with different
+    // content. The hook must not return stale cached spans.
+    const marker = '[Output truncated \u2014 showing last 500KB]\n';
+
+    // Phase 1: first truncated output
+    const tail1 = 'D'.repeat(200) + 'ENDING_ONE';
+    const output1 = marker + tail1;
+    const { result, rerender } = renderHook(
+      ({ output }) => useIncrementalAnsi(output),
+      { initialProps: { output: output1 } },
+    );
+
+    const phase1Content = result.current.map((s) => s.content).join('');
+    expect(phase1Content).toContain('ENDING_ONE');
+
+    // Phase 2: second truncated output — same marker prefix, same length,
+    // but different tail content (simulates front-slice + new append)
+    const tail2 = 'D'.repeat(200) + 'ENDING_TWO';
+    const output2 = marker + tail2;
+    // Ensure same length to exercise the same-length-different-suffix path
+    expect(output2.length).toBe(output1.length);
+
+    rerender({ output: output2 });
+
+    const phase2Content = result.current.map((s) => s.content).join('');
+    expect(phase2Content).toContain('ENDING_TWO');
+    expect(phase2Content).not.toContain('ENDING_ONE');
+
+    // Verify it matches a fresh parse
+    const freshSpans = parseAnsi(output2);
+    const freshContent = freshSpans.map((s) => s.content).join('');
+    expect(phase2Content).toBe(freshContent);
+  });
 });

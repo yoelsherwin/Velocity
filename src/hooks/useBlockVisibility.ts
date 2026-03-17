@@ -77,10 +77,17 @@ export function useBlockVisibility() {
 /**
  * Estimate the height of a block's output for the placeholder when not visible.
  * This prevents layout shift when blocks come into / go out of view.
+ *
+ * Uses a counting loop instead of split('\n') to avoid allocating a large
+ * string array on outputs up to 500KB. Short-circuits after 50 newlines
+ * since the height is capped at 50 lines anyway.
  */
 export function estimateBlockHeight(output: string): number {
-  const lines = output.split('\n').length;
+  let lines = 1;
+  for (let i = 0; i < output.length && lines < 50; i++) {
+    if (output[i] === '\n') lines++;
+  }
   const lineHeight = 19.6; // 14px font * 1.4 line-height
   const headerHeight = 32;
-  return headerHeight + Math.min(lines, 50) * lineHeight;
+  return headerHeight + lines * lineHeight;
 }

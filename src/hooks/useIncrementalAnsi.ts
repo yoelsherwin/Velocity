@@ -6,6 +6,8 @@ interface IncrementalAnsiState {
   parsedLength: number;
   /** First 64 chars of the parsed output, used for prefix-match detection */
   prefixSample: string;
+  /** Last 64 chars of the parsed output, used to detect content changes at same length */
+  suffixSample: string;
 }
 
 /**
@@ -25,6 +27,7 @@ export function useIncrementalAnsi(output: string): AnsiSpan[] {
     parsedSpans: [],
     parsedLength: 0,
     prefixSample: '',
+    suffixSample: '',
   });
 
   return useMemo(() => {
@@ -35,12 +38,29 @@ export function useIncrementalAnsi(output: string): AnsiSpan[] {
       cache.parsedSpans = [];
       cache.parsedLength = 0;
       cache.prefixSample = '';
+      cache.suffixSample = '';
       return cache.parsedSpans;
     }
 
     // No change — return cached spans (same reference for React.memo)
-    if (output.length === cache.parsedLength && output.slice(0, 64) === cache.prefixSample) {
+    if (
+      output.length === cache.parsedLength &&
+      output.slice(0, 64) === cache.prefixSample &&
+      output.slice(-64) === cache.suffixSample
+    ) {
       return cache.parsedSpans;
+    }
+
+    // If output is shorter than what we've parsed, truncation happened — full reparse.
+    // Also catches same-length-but-different-content (e.g., steady-state truncation
+    // where front-slicing + appending produces the same length but different content).
+    if (output.length < cache.parsedLength) {
+      const spans = parseAnsi(output);
+      cache.parsedSpans = spans;
+      cache.parsedLength = output.length;
+      cache.prefixSample = output.slice(0, 64);
+      cache.suffixSample = output.slice(-64);
+      return spans;
     }
 
     // Incremental append: output is longer AND starts with the same prefix
@@ -55,6 +75,7 @@ export function useIncrementalAnsi(output: string): AnsiSpan[] {
       cache.parsedSpans = allSpans;
       cache.parsedLength = output.length;
       // prefixSample stays the same (prefix didn't change)
+      cache.suffixSample = output.slice(-64);
       return allSpans;
     }
 
@@ -63,6 +84,7 @@ export function useIncrementalAnsi(output: string): AnsiSpan[] {
     cache.parsedSpans = spans;
     cache.parsedLength = output.length;
     cache.prefixSample = output.slice(0, 64);
+    cache.suffixSample = output.slice(-64);
     return spans;
   }, [output]);
 }
