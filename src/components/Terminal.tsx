@@ -11,8 +11,12 @@ import BlockView from './blocks/BlockView';
 import InputEditor from './editor/InputEditor';
 import { useCommandHistory } from '../hooks/useCommandHistory';
 import { useGhostText } from '../hooks/useGhostText';
+import { useBlockVisibility } from '../hooks/useBlockVisibility';
 
-export const MAX_BLOCKS = 50;
+export const MAX_BLOCKS = 500;
+export const OUTPUT_LIMIT_PER_BLOCK = 500_000;
+
+const TRUNCATION_MARKER = '[Output truncated \u2014 showing last 500KB]\n';
 
 const SHELL_LABELS: Record<ShellType, string> = {
   powershell: 'PowerShell',
@@ -53,6 +57,7 @@ function Terminal() {
 
   const { history, addCommand, navigateUp, navigateDown, reset, setDraft } = useCommandHistory();
   const { suggestion } = useGhostText(input, history);
+  const { visibleIds, observeBlock } = useBlockVisibility();
 
   const updateSessionId = useCallback((id: string | null) => {
     sessionIdRef.current = id;
@@ -103,7 +108,11 @@ function Terminal() {
             setBlocks((prev) =>
               prev.map((b) => {
                 if (b.id !== activeBlockIdRef.current) return b;
-                const newOutput = b.output + event.payload;
+                let newOutput = b.output + event.payload;
+                // Apply per-block output cap: truncate from front, keep most recent output
+                if (newOutput.length > OUTPUT_LIMIT_PER_BLOCK) {
+                  newOutput = TRUNCATION_MARKER + newOutput.slice(-OUTPUT_LIMIT_PER_BLOCK);
+                }
                 const { cleanOutput, exitCode } = extractExitCode(newOutput);
                 return {
                   ...b,
@@ -405,6 +414,8 @@ function Terminal() {
             block={block}
             isActive={block.id === activeBlockIdRef.current}
             onRerun={handleRerun}
+            isVisible={visibleIds.has(block.id)}
+            observeRef={(el) => observeBlock(block.id, el)}
           />
         ))}
         {closed && <div className="block-process-exited">[Process exited]</div>}

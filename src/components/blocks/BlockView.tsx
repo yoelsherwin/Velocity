@@ -2,14 +2,17 @@ import React, { useCallback, useMemo } from 'react';
 import { Block } from '../../lib/types';
 import { stripAnsi } from '../../lib/ansi';
 import AnsiOutput from '../AnsiOutput';
+import { estimateBlockHeight } from '../../hooks/useBlockVisibility';
 
 interface BlockViewProps {
   block: Block;
   isActive: boolean;        // true if this is the currently running block
   onRerun: (command: string) => void;
+  isVisible?: boolean;      // true if block is in or near the viewport
+  observeRef?: (el: HTMLDivElement | null) => void;  // callback ref for IntersectionObserver
 }
 
-function BlockView({ block, isActive, onRerun }: BlockViewProps) {
+function BlockView({ block, isActive, onRerun, isVisible = true, observeRef }: BlockViewProps) {
   const formattedTime = useMemo(() => {
     return new Date(block.timestamp).toLocaleTimeString();
   }, [block.timestamp]);
@@ -34,6 +37,7 @@ function BlockView({ block, isActive, onRerun }: BlockViewProps) {
 
   return (
     <div
+      ref={observeRef}
       className={`block-container ${isActive && block.status === 'running' ? 'block-active' : ''}`}
       data-testid="block-container"
     >
@@ -60,9 +64,17 @@ function BlockView({ block, isActive, onRerun }: BlockViewProps) {
         </div>
       )}
       {block.output && (
-        <pre className="block-output" data-testid="block-output">
-          <AnsiOutput text={block.output} />
-        </pre>
+        isVisible ? (
+          <pre className="block-output" data-testid="block-output">
+            <AnsiOutput text={block.output} />
+          </pre>
+        ) : (
+          <pre
+            className="block-output block-output-placeholder"
+            data-testid="block-output-placeholder"
+            style={{ height: estimateBlockHeight(block.output) }}
+          />
+        )
       )}
       <div className="block-actions">
         {!isWelcome && (

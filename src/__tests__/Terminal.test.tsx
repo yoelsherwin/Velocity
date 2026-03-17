@@ -380,7 +380,7 @@ describe('Terminal Component', () => {
 
   it('test_blocks_limited_to_max', () => {
     // Verify the MAX_BLOCKS constant is exported and has the expected value
-    expect(MAX_BLOCKS).toBe(50);
+    expect(MAX_BLOCKS).toBe(500);
   });
 
   // --- FIX-011: Empty input should not submit a command ---

@@ -1,12 +1,12 @@
-import React, { useMemo } from 'react';
-import { parseAnsi } from '../lib/ansi';
+import React from 'react';
+import { useIncrementalAnsi } from '../hooks/useIncrementalAnsi';
 
 interface AnsiOutputProps {
   text: string;
 }
 
 function AnsiOutput({ text }: AnsiOutputProps) {
-  const spans = useMemo(() => parseAnsi(text), [text]);
+  const spans = useIncrementalAnsi(text);
   return (
     <>
       {spans.map((span, i) => (
