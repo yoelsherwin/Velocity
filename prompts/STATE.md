@@ -1,93 +1,84 @@
 # Velocity Project State
 
 > Last updated by CTO session: `41746083-3b91-4ff2-83f8-b09d0c659fc1`
-> Last updated at: `2026-03-15`
+> Last updated at: `2026-03-17`
 
 ## Current Phase
-**MVP COMPLETE.** All 5 pillars implemented and reviewed.
+**Post-MVP Phase 1 (Usability).** Closing P0 gaps for daily-use readiness.
 
-## Backlog Position
-Post-MVP. Next steps: polish, bug fixes, production build, release.
+## Phase 1 Progress
 
-## Completed Tasks
+| # | Feature | Status |
+|---|---------|--------|
+| P0-1 | Full terminal emulation (xterm/VT100) | Not started |
+| P0-2 | Tab/path completions | Not started |
+| P0-3 | Find in terminal output (Ctrl+Shift+F) | **IN PROGRESS** (TASK-020) |
+| P0-4 | Command palette (Ctrl+Shift+P) | Not started |
+| P0-5 | Scrollback + large output handling | **DONE** (`25ae200` + `b7bca3d`) |
+| P0-6 | True color + 256-color rendering | **DONE** (`a04290b`) — was already working, added 8 tests |
+| P0-7 | CLI/AI mode indicator | **DONE** (`04461db`) |
+| P0-8a | Intent classifier heuristic engine | **DONE** (`04461db`) |
+| P0-8b | Known-command enumeration (Rust) | **DONE** (`04461db`) |
+| P0-8c | LLM fallback for ambiguous inputs | Deferred |
+| P0-BUG | BUG-004 + BUG-025 | **FIXED** in P0-5 |
 
-| Task | Description | Code Review | Security | QA |
-|------|-------------|-------------|----------|-----|
-| TASK-001 | Bootstrap project | APPROVED R2 | PASS | N/A |
-| TASK-002 | PTY engine — spawn and stream | APPROVED R2 | PASS | N/A |
-| TASK-003 | ANSI security filter + color rendering | APPROVED R2 | PASS | PASS |
-| TASK-004 | Process lifecycle + shell selection | APPROVED R2 | PASS | PASS |
-| TASK-005 | Block model — command/output containers | APPROVED R2 | PASS | PASS |
-| TASK-006 | PTY channel refactor + integration tests | APPROVED R1 | N/A | N/A |
-| TASK-007 | E2E tests with Playwright | N/A | N/A | N/A |
-| TASK-008 | Input editor — multi-line + syntax highlighting | APPROVED R2 | N/A | PASS |
-| TASK-009 | Tabbed interface | APPROVED R2 | N/A | PASS |
-| TASK-010 | Split panes | APPROVED R2 | N/A | PASS |
-| TASK-011 | Ghost text + command history | APPROVED R2 | N/A | N/A |
-| TASK-012 | Exit codes via shell markers | APPROVED R1+fix | PASS | PASS |
-| TASK-013 | Draggable pane dividers | APPROVED R1 | PASS | PASS |
-| TASK-014 | Per-tab pane focus | APPROVED R1 | PASS | PASS |
-| TASK-015 | Settings system + API key management | APPROVED R2 | PASS | PASS |
-| TASK-016 | LLM provider client (4 providers) | APPROVED R2 | PASS | PASS |
-| TASK-017 | Agent mode UI — # trigger + translation | APPROVED R2 | PASS | PASS |
+**Remaining: P0-1, P0-2, P0-3, P0-4** (4 items)
 
 ## In Progress
-None.
+TASK-020: Find in Terminal Output (Ctrl+Shift+F) — P0-3
 
-## Pillar Status — ALL COMPLETE
+## Outstanding Issues
 
-| Pillar | Status | Key Features |
-|--------|--------|-------------|
-| 1. Process Interfacing | **COMPLETE** | PTY spawn, real-time streaming, ANSI security filter, shell lifecycle, PowerShell/CMD/WSL, ConPTY fixes, lazy reader, channel architecture, child watchdog |
-| 2. Block Model | **COMPLETE** | Command/output blocks, exit codes (✓/✗), timestamps, copy command/output, rerun, MAX_BLOCKS=50 |
-| 3. Input Editor | **COMPLETE** | Multi-line (Shift+Enter), syntax highlighting (commands/flags/strings/pipes), ghost text suggestions, command history (Up/Down), Tab completion |
-| 4. Structural Layout | **COMPLETE** | Tabs (Ctrl+T/W), split panes (horizontal/vertical), draggable dividers, per-tab focus, keyboard shortcuts, MAX_PANES=20 |
-| 5. Agent Mode | **COMPLETE** | Settings modal (4 LLM providers), API key management, # trigger, LLM command translation, review-first execution, loading/error states, staleness guard |
-
-## Test Summary (verified 2026-03-15)
-
-| Layer | Suite | Count |
-|-------|-------|-------|
-| Unit | Vitest (frontend) | 193 |
-| Unit | cargo test (Rust) | 64 (+1 ignored) |
-| Integration | Rust PTY (real PowerShell) | 10 |
-| E2E | Playwright (real app + CDP) | 22+ |
-| **Total** | | **~289** |
-
-## Security Reviews Summary
-- 7 security reviews conducted across all pillars
-- 0 critical findings ever
-- Key accepted risks: plaintext API key storage (MVP), Google API key in URL, full env inheritance by shells
-- Never-auto-execute guarantee verified for Agent Mode
-
-## Outstanding Issues — Tracked
-
-### Medium Severity
-- BUG-004: Full ANSI re-parse per PTY event (perf)
+### Medium (from Phase 1 reviews)
 - BUG-009: Rapid shell switching race → orphaned sessions
 - BUG-020: Welcome block retains `running` status after session close
-- BUG-025: No per-block output size limit
 - BUG-033: Tab close → closeSession fire-and-forget
 - BUG-034: No frontend MAX_SESSIONS enforcement for tabs
+- BUG-039: Truncation marker causes redundant re-truncation at cap (perf)
 - SEC-015-H1: Plaintext API key storage (future: OS keychain)
-- SEC-015-H2: Google API key in URL query param
-- SEC-015-M3: get_settings returns full API key to WebView
-- SEC-015-M4: Azure endpoint not SSRF-validated
-- SEC-017-H1: LLM prompt injection / social engineering (add dangerous command warnings)
-- SEC-017-M2: get_cwd path disclosure to LLM providers
+- SEC-015-H2: Google API key in URL (Google's required auth)
+- SEC-017-H1: LLM prompt injection (add dangerous command warnings)
+- SEC-018-H1: Heuristic misclassification → unintended LLM data disclosure
 
-### Low Severity
-- BUG-010, 028, 029, 031, 032, 035, 038 + various QA observations
+### Low
+- BUG-010, 028, 029, 031, 032, 035, 038, 040, 041
+- QA-018 BUG-001: History navigation doesn't re-classify intent
+- QA-018 BUG-002: ModeIndicator missing disabled HTML attribute
 
 ### Accepted Risk
 - SEC-002-H1: Full parent env inherited by shells
 - SEC-001-M1: `unsafe-inline` in style-src CSP
 - SEC-005-M1: Rerun without confirmation
 
-## Architecture Notes
-- Current HEAD: `eb56db1`
-- ~50 commits on main
-- Rust backend: PTY (portable-pty + ConPTY), ANSI filter (vte), session manager, LLM client (reqwest), settings (JSON file)
-- React frontend: Terminal, BlockView, InputEditor, TabManager, PaneContainer, SettingsModal
-- Channel-based PTY architecture (testable without Tauri runtime)
-- 4 LLM providers: OpenAI, Anthropic (Claude), Google (Gemini), Azure OpenAI
+## Test Summary
+
+| Layer | Count |
+|-------|-------|
+| Vitest (frontend) | 244 |
+| cargo test (Rust unit) | 69 (+1 ignored) |
+| Rust integration | 10 |
+| Playwright E2E | 24 |
+| **Total** | **~347** |
+
+## Remaining Phase 1 Roadmap
+
+### P0-1: Full terminal emulation (Large — biggest remaining item)
+Need alternate screen, cursor positioning, application-mode keys. Consider `alacritty_terminal` or `vt100` crate, or `xterm.js` on frontend.
+
+### P0-2: Tab/path completions (Medium-Large)
+Start with path completion + top 20 CLI tools. Consider Fig completion spec format.
+
+### P0-3: Find in terminal output (Small-Medium)
+Ctrl+Shift+F search overlay with match highlighting.
+
+### P0-4: Command palette (Small-Medium)
+Ctrl+Shift+P fuzzy search over actions/settings.
+
+## Phase 2+ Roadmap (unchanged)
+See `prompts/reports/investigations/INVESTIGATION-warp-feature-gap.md` for full gap analysis.
+
+P1: Themes, fonts, git context, multi-turn AI, error correction, block enhancements, notifications, session restore, global hotkey, rich history, secret redaction, multiple windows.
+
+P2: Vim keys, SSH, workflows, accessibility, code editor integration.
+
+P3: Cloud collaboration, notebooks, orchestration.
