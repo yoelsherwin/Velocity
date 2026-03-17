@@ -238,6 +238,38 @@ mod tests {
     }
 
     #[test]
+    fn test_256_color_preserved() {
+        let mut filter = AnsiFilter::new();
+        let result = filter.filter(b"\x1b[38;5;196mred\x1b[0m");
+        assert!(result.contains("\x1b[38;5;196m"), "256-color foreground should be preserved, got: {}", result);
+        assert!(result.contains("red"));
+    }
+
+    #[test]
+    fn test_truecolor_preserved() {
+        let mut filter = AnsiFilter::new();
+        let result = filter.filter(b"\x1b[38;2;255;100;0morange\x1b[0m");
+        assert!(result.contains("\x1b[38;2;255;100;0m"), "Truecolor foreground should be preserved, got: {}", result);
+        assert!(result.contains("orange"));
+    }
+
+    #[test]
+    fn test_256_color_background() {
+        let mut filter = AnsiFilter::new();
+        let result = filter.filter(b"\x1b[48;5;21mblue bg\x1b[0m");
+        assert!(result.contains("\x1b[48;5;21m"), "256-color background should be preserved, got: {}", result);
+        assert!(result.contains("blue bg"));
+    }
+
+    #[test]
+    fn test_truecolor_background() {
+        let mut filter = AnsiFilter::new();
+        let result = filter.filter(b"\x1b[48;2;0;128;255mbg\x1b[0m");
+        assert!(result.contains("\x1b[48;2;0;128;255m"), "Truecolor background should be preserved, got: {}", result);
+        assert!(result.contains("bg"));
+    }
+
+    #[test]
     fn test_parser_persists_across_chunks() {
         // Simulate an SGR sequence split across two PTY read chunks.
         // With a persistent parser, the sequence is reassembled correctly.

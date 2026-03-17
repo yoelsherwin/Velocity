@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseAnsi, isValidRgb } from '../lib/ansi';
+import { parseAnsi, stripAnsi, isValidRgb } from '../lib/ansi';
 
 describe('isValidRgb', () => {
   it('test_isValidRgb_accepts_valid', () => {
@@ -38,5 +38,30 @@ describe('parseAnsi', () => {
     expect(redSpan).toBeDefined();
     // The red span should have an fg property
     expect(redSpan!.fg).toBeDefined();
+  });
+
+  it('test_parseAnsi_256_color', () => {
+    const result = parseAnsi('\x1b[38;5;196mred\x1b[0m');
+    const redSpan = result.find((s) => s.content === 'red');
+    expect(redSpan).toBeDefined();
+    expect(redSpan!.fg).toBeDefined();
+  });
+
+  it('test_parseAnsi_truecolor', () => {
+    const result = parseAnsi('\x1b[38;2;255;100;0morange\x1b[0m');
+    const orangeSpan = result.find((s) => s.content === 'orange');
+    expect(orangeSpan).toBeDefined();
+    expect(orangeSpan!.fg).toBeDefined();
+    expect(orangeSpan!.fg).toContain('255');
+  });
+});
+
+describe('stripAnsi', () => {
+  it('test_stripAnsi_removes_extended_colors', () => {
+    expect(stripAnsi('\x1b[38;5;196mred\x1b[0m')).toBe('red');
+  });
+
+  it('test_stripAnsi_removes_truecolor', () => {
+    expect(stripAnsi('\x1b[38;2;255;100;0morange\x1b[0m')).toBe('orange');
   });
 });
