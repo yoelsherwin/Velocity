@@ -233,7 +233,9 @@ function TabManager() {
    */
   const dispatchToFocusedTerminal = useCallback((commandId: string) => {
     document.dispatchEvent(
-      new CustomEvent('velocity:command', { detail: { commandId } }),
+      new CustomEvent('velocity:command', {
+        detail: { commandId, paneId: focusedPaneIdRef.current },
+      }),
     );
   }, []);
 

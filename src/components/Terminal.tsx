@@ -39,11 +39,17 @@ function createBlock(command: string, shellType: ShellType): Block {
   };
 }
 
-function Terminal() {
+interface TerminalProps {
+  paneId?: string;
+}
+
+function Terminal({ paneId }: TerminalProps) {
   const sessionIdRef = useRef<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [shellType, setShellType] = useState<ShellType>('powershell');
   const [blocks, setBlocks] = useState<Block[]>([]);
+  const blocksRef = useRef<Block[]>(blocks);
+  blocksRef.current = blocks;
   const activeBlockIdRef = useRef<string | null>(null);
   const [input, setInput] = useState('');
   const [closed, setClosed] = useState(false);
@@ -426,8 +432,12 @@ function Terminal() {
   // Listen for velocity:command custom events (dispatched by command palette)
   useEffect(() => {
     const handleCommand = (e: Event) => {
-      const commandId = (e as CustomEvent).detail?.commandId;
+      const detail = (e as CustomEvent).detail;
+      const commandId = detail?.commandId;
       if (!commandId) return;
+
+      // Ignore events targeted at a different pane
+      if (detail.paneId && paneId && detail.paneId !== paneId) return;
 
       switch (commandId) {
         case 'shell.powershell':
@@ -450,14 +460,14 @@ function Terminal() {
           activeBlockIdRef.current = null;
           break;
         case 'terminal.copyLastCommand': {
-          const lastCmdBlock = [...blocks].reverse().find((b) => b.command.trim() !== '');
+          const lastCmdBlock = [...blocksRef.current].reverse().find((b) => b.command.trim() !== '');
           if (lastCmdBlock) {
             navigator.clipboard.writeText(lastCmdBlock.command).catch(() => {});
           }
           break;
         }
         case 'terminal.copyLastOutput': {
-          const lastOutBlock = [...blocks].reverse().find((b) => b.output.trim() !== '');
+          const lastOutBlock = [...blocksRef.current].reverse().find((b) => b.output.trim() !== '');
           if (lastOutBlock) {
             navigator.clipboard.writeText(stripAnsi(lastOutBlock.output)).catch(() => {});
           }
@@ -477,7 +487,7 @@ function Terminal() {
 
     document.addEventListener('velocity:command', handleCommand);
     return () => document.removeEventListener('velocity:command', handleCommand);
-  }, [handleShellSwitch, handleRestart, handleToggleMode, blocks, search.isOpen, search.open]);
+  }, [paneId, handleShellSwitch, handleRestart, handleToggleMode, search.isOpen, search.open]);
 
   // Scroll to current match when it changes
   useEffect(() => {

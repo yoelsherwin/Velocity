@@ -88,20 +88,10 @@ function CommandPalette({ onExecute, onClose }: CommandPaletteProps) {
     [results, selectedIndex, onClose, handleExecute],
   );
 
-  const handleBackdropClick = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
-      if (e.target === e.currentTarget) {
-        onClose();
-      }
-    },
-    [onClose],
-  );
-
   return (
     <div
       className="palette-overlay"
       data-testid="command-palette"
-      onClick={handleBackdropClick}
     >
       <div
         className="palette-backdrop"

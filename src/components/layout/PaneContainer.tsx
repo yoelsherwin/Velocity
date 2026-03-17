@@ -129,7 +129,7 @@ function PaneContainer({
         onClick={() => onFocusPane(node.id)}
         data-testid={`pane-${node.id}`}
       >
-        <Terminal key={node.id} />
+        <Terminal key={node.id} paneId={node.id} />
         <div className="pane-actions">
           <button
             className="pane-action-btn"
