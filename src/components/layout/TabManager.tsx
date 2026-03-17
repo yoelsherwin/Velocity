@@ -4,6 +4,7 @@ import { splitPane, closePane, countLeaves, getLeafIds, updatePaneRatio } from '
 import TabBar from './TabBar';
 import PaneContainer from './PaneContainer';
 import SettingsModal from '../SettingsModal';
+import CommandPalette from '../CommandPalette';
 
 const MAX_PANES_TOTAL = 20;
 
@@ -37,6 +38,7 @@ function TabManager() {
   const [activeTabId, setActiveTabId] = useState<string>(() => tabs[0].id);
   const activeTabIdRef = useRef(activeTabId);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
   // Derive focusedPaneId from the active tab
   const activeTab = tabs.find((t) => t.id === activeTabId);
@@ -213,11 +215,66 @@ function TabManager() {
           handleClosePane(activeTabIdRef.current, focusedPaneIdRef.current);
         }
       }
+      // Ctrl+Shift+P: Toggle command palette
+      if (e.ctrlKey && e.shiftKey && (e.key === 'P' || e.key === 'p')) {
+        e.preventDefault();
+        setPaletteOpen((prev) => !prev);
+      }
     };
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [handleNewTab, handleCloseTab, handleSplitPane, handleClosePane]);
+
+  /**
+   * Dispatch an action from the command palette.
+   * Tab/pane level actions are handled here; terminal-level actions
+   * are dispatched via a custom DOM event to the focused terminal.
+   */
+  const dispatchToFocusedTerminal = useCallback((commandId: string) => {
+    document.dispatchEvent(
+      new CustomEvent('velocity:command', { detail: { commandId } }),
+    );
+  }, []);
+
+  const handlePaletteAction = useCallback(
+    (commandId: string) => {
+      switch (commandId) {
+        case 'tab.new':
+          handleNewTab();
+          break;
+        case 'tab.close':
+          handleCloseTab(activeTabIdRef.current);
+          break;
+        case 'pane.splitRight':
+          if (focusedPaneIdRef.current) {
+            handleSplitPane(activeTabIdRef.current, focusedPaneIdRef.current, 'horizontal');
+          }
+          break;
+        case 'pane.splitDown':
+          if (focusedPaneIdRef.current) {
+            handleSplitPane(activeTabIdRef.current, focusedPaneIdRef.current, 'vertical');
+          }
+          break;
+        case 'pane.close':
+          if (focusedPaneIdRef.current) {
+            handleClosePane(activeTabIdRef.current, focusedPaneIdRef.current);
+          }
+          break;
+        case 'settings.open':
+          setSettingsOpen(true);
+          break;
+        case 'palette.open':
+          // No-op: palette is already open
+          break;
+        default:
+          // Terminal-level actions dispatched via custom event
+          dispatchToFocusedTerminal(commandId);
+          break;
+      }
+    },
+    [handleNewTab, handleCloseTab, handleSplitPane, handleClosePane, dispatchToFocusedTerminal],
+  );
 
   return (
     <div className="tab-manager">
@@ -249,6 +306,12 @@ function TabManager() {
           </div>
         ))}
       </div>
+      {paletteOpen && (
+        <CommandPalette
+          onExecute={handlePaletteAction}
+          onClose={() => setPaletteOpen(false)}
+        />
+      )}
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
     </div>
   );

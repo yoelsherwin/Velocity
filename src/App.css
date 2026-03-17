@@ -811,3 +811,136 @@ html, body, #root {
   outline: 1px solid #f9e2af;
   border-radius: 1px;
 }
+
+/* --- Command Palette Styles --- */
+
+.palette-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 500;
+  display: flex;
+  justify-content: center;
+  padding-top: 20vh;
+}
+
+.palette-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.3);
+  z-index: -1;
+}
+
+.palette-dialog {
+  width: 500px;
+  max-width: 90vw;
+  max-height: 400px;
+  background-color: #1e1e2e;
+  border: 1px solid #45475a;
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  height: fit-content;
+}
+
+.palette-input-row {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid #313244;
+}
+
+.palette-prefix {
+  color: #89b4fa;
+  font-size: 16px;
+  font-weight: 600;
+  margin-right: 8px;
+  user-select: none;
+}
+
+.palette-input {
+  flex: 1;
+  padding: 4px 0;
+  border: none;
+  background: transparent;
+  color: #cdd6f4;
+  font-family: 'Cascadia Code', 'Consolas', 'Courier New', monospace;
+  font-size: 14px;
+  outline: none;
+}
+
+.palette-input::placeholder {
+  color: #585b70;
+}
+
+.palette-results {
+  overflow-y: auto;
+  max-height: 340px;
+  padding: 4px 0;
+}
+
+.palette-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  cursor: pointer;
+  transition: background-color 0.1s;
+}
+
+.palette-item:hover {
+  background-color: #313244;
+}
+
+.palette-item-selected {
+  background-color: #313244;
+}
+
+.palette-item-title {
+  color: #cdd6f4;
+  font-size: 14px;
+}
+
+.palette-match-char {
+  color: #89b4fa;
+  font-weight: 600;
+}
+
+.palette-item-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+  margin-left: 16px;
+}
+
+.palette-shortcut {
+  padding: 2px 6px;
+  border: 1px solid #45475a;
+  border-radius: 3px;
+  background-color: #313244;
+  color: #a6adc8;
+  font-family: 'Cascadia Code', 'Consolas', 'Courier New', monospace;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.palette-category {
+  color: #6c7086;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.palette-no-results {
+  padding: 16px;
+  text-align: center;
+  color: #6c7086;
+  font-size: 13px;
+}

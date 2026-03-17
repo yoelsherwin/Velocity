@@ -6,6 +6,7 @@ import { extractExitCode, getExitCodeMarker } from '../lib/exit-code-parser';
 import { classifyIntent, stripHashPrefix, ClassificationResult } from '../lib/intent-classifier';
 import { translateCommand } from '../lib/llm';
 import { getCwd } from '../lib/cwd';
+import { stripAnsi } from '../lib/ansi';
 import { useKnownCommands } from '../hooks/useKnownCommands';
 import BlockView from './blocks/BlockView';
 import InputEditor from './editor/InputEditor';
@@ -421,6 +422,62 @@ function Terminal() {
     // Return focus to the editor textarea
     editorRef.current?.focus();
   }, [search.close]);
+
+  // Listen for velocity:command custom events (dispatched by command palette)
+  useEffect(() => {
+    const handleCommand = (e: Event) => {
+      const commandId = (e as CustomEvent).detail?.commandId;
+      if (!commandId) return;
+
+      switch (commandId) {
+        case 'shell.powershell':
+          handleShellSwitch('powershell');
+          break;
+        case 'shell.cmd':
+          handleShellSwitch('cmd');
+          break;
+        case 'shell.wsl':
+          handleShellSwitch('wsl');
+          break;
+        case 'terminal.restart':
+          handleRestart();
+          break;
+        case 'terminal.toggleMode':
+          handleToggleMode();
+          break;
+        case 'terminal.clear':
+          setBlocks([]);
+          activeBlockIdRef.current = null;
+          break;
+        case 'terminal.copyLastCommand': {
+          const lastCmdBlock = [...blocks].reverse().find((b) => b.command.trim() !== '');
+          if (lastCmdBlock) {
+            navigator.clipboard.writeText(lastCmdBlock.command).catch(() => {});
+          }
+          break;
+        }
+        case 'terminal.copyLastOutput': {
+          const lastOutBlock = [...blocks].reverse().find((b) => b.output.trim() !== '');
+          if (lastOutBlock) {
+            navigator.clipboard.writeText(stripAnsi(lastOutBlock.output)).catch(() => {});
+          }
+          break;
+        }
+        case 'search.find':
+          if (search.isOpen) {
+            searchInputRef.current?.focus();
+          } else {
+            search.open();
+          }
+          break;
+        default:
+          break;
+      }
+    };
+
+    document.addEventListener('velocity:command', handleCommand);
+    return () => document.removeEventListener('velocity:command', handleCommand);
+  }, [handleShellSwitch, handleRestart, handleToggleMode, blocks, search.isOpen, search.open]);
 
   // Scroll to current match when it changes
   useEffect(() => {
