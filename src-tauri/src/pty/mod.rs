@@ -528,9 +528,16 @@ impl SessionManager {
             })
             .map_err(|e| format!("Failed to resize session: {}", e))?;
 
-        // Also resize the terminal emulator so it matches the PTY dimensions
-        if let Ok(mut emu) = session.emulator.lock() {
-            emu.resize(rows, cols);
+        // Also resize the terminal emulator so it matches the PTY dimensions.
+        // If the mutex is poisoned (reader thread panicked while holding the lock),
+        // the emulator is in an unknown state — log a warning but continue, since
+        // a poisoned mutex means the reader thread is already dead.
+        match session.emulator.lock() {
+            Ok(mut emu) => emu.resize(rows, cols),
+            Err(e) => eprintln!(
+                "[pty:{}] WARNING: emulator mutex poisoned during resize, skipping: {}",
+                session_id, e
+            ),
         }
 
         Ok(())
