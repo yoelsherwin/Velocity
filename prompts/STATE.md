@@ -11,7 +11,7 @@
 | # | Feature | Status |
 |---|---------|--------|
 | P0-1 | Full terminal emulation (xterm/VT100) | Not started |
-| P0-2 | Tab/path completions | **IN PROGRESS** (TASK-022) |
+| P0-2 | Tab/path completions | **DONE** (`e57b639` + `dde12a2`) |
 | P0-3 | Find in terminal output (Ctrl+Shift+F) | **DONE** (`3848a3a` + `7251e29`) |
 | P0-4 | Command palette (Ctrl+Shift+P) | **DONE** (`23e812a` + `9592e1c`) |
 | P0-5 | Scrollback + large output handling | **DONE** (`25ae200` + `b7bca3d`) |
@@ -22,10 +22,10 @@
 | P0-8c | LLM fallback for ambiguous inputs | Deferred |
 | P0-BUG | BUG-004 + BUG-025 | **FIXED** in P0-5 |
 
-**Remaining: P0-1, P0-2** (2 items)
+**Remaining: P0-1** (1 item)
 
 ## In Progress
-TASK-022: Tab/Path Completions — P0-2
+None.
 
 ## Outstanding Issues
 
@@ -41,6 +41,9 @@ TASK-022: Tab/Path Completions — P0-2
 - SEC-018-H1: Heuristic misclassification → unintended LLM data disclosure
 - QA-021 BUG-001: `terminal.clear` drops in-flight PTY output (no replacement block)
 - QA-021 BUG-002: Keyboard shortcuts leak through open palette overlay
+- QA-022 BUG-001: Tab completion debounce makes first Tab appear unresponsive
+- QA-022 BUG-002: handleTab bypasses handleInputChange (skips draft/classifier update)
+- QA-022 BUG-007: CWD for completions is Tauri process CWD, not shell CWD after cd
 
 ### Low
 - BUG-010, 028, 029, 031, 032, 035, 038, 040, 041
@@ -49,21 +52,25 @@ TASK-022: Tab/Path Completions — P0-2
 - QA-020 BUG-001: Search "10,000+ matches" text unreachable (> vs >=)
 - QA-021 BUG-003: Missing ARIA attributes on command palette
 - QA-021 BUG-004: Hover and selected states visually identical in palette
+- QA-022 BUG-003: Case-insensitive ghost text looks odd with mixed-case partials
+- QA-022 BUG-004: Completions reset on any cursor move, even within same token
+- QA-022 BUG-006: PATH scan strips extensions via first-dot split
 
 ### Accepted Risk
 - SEC-002-H1: Full parent env inherited by shells
 - SEC-001-M1: `unsafe-inline` in style-src CSP
 - SEC-005-M1: Rerun without confirmation
+- SEC-022: Unrestricted directory enumeration via get_completions (accepted — terminal has full shell access)
 
 ## Test Summary
 
 | Layer | Count |
 |-------|-------|
-| Vitest (frontend) | 295 |
-| cargo test (Rust unit) | 69 (+1 ignored) |
+| Vitest (frontend) | 313 |
+| cargo test (Rust unit) | 77 (+1 ignored) |
 | Rust integration | 10 |
-| Playwright E2E | 25 |
-| **Total** | **~399** |
+| Playwright E2E | 26 |
+| **Total** | **~426** |
 
 ## Remaining Phase 1 Roadmap
 
