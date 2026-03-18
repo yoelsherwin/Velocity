@@ -140,6 +140,14 @@ fn spawn_reader_thread(
                                 last_grid_send = std::time::Instant::now();
                             } else {
                                 evts.push(PtyEvent::AltScreenExit);
+                                // Also forward any normal-mode output from this chunk
+                                // (the exit sequence and normal output can arrive in the same read)
+                                if let Some(output) = process_output {
+                                    evts.push(match output {
+                                        TerminalOutput::Append(s) => PtyEvent::Output(s),
+                                        TerminalOutput::Replace(s) => PtyEvent::OutputReplace(s),
+                                    });
+                                }
                             }
                         } else if emu.is_alternate_screen() {
                             // While in alt screen, send throttled grid updates
@@ -265,17 +273,18 @@ fn spawn_bridge_thread(
 ) {
     std::thread::spawn(move || {
         while let Ok(event) = rx.recv() {
-            match &event {
+            // Take ownership of event to avoid cloning (especially GridUpdate data)
+            match event {
                 PtyEvent::Output(output) => {
                     if let Err(e) =
-                        app_handle.emit(&format!("pty:output:{}", session_id), output.clone())
+                        app_handle.emit(&format!("pty:output:{}", session_id), output)
                     {
                         eprintln!("[pty:{}] Failed to emit output: {}", session_id, e);
                     }
                 }
                 PtyEvent::OutputReplace(output) => {
                     if let Err(e) =
-                        app_handle.emit(&format!("pty:output-replace:{}", session_id), output.clone())
+                        app_handle.emit(&format!("pty:output-replace:{}", session_id), output)
                     {
                         eprintln!("[pty:{}] Failed to emit output-replace: {}", session_id, e);
                     }
@@ -288,7 +297,7 @@ fn spawn_bridge_thread(
                     }
                     if let Err(e) = app_handle.emit(
                         &format!("pty:alt-screen-enter:{}", session_id),
-                        AltScreenPayload { rows: *rows, cols: *cols },
+                        AltScreenPayload { rows, cols },
                     ) {
                         eprintln!("[pty:{}] Failed to emit alt-screen-enter: {}", session_id, e);
                     }
@@ -302,14 +311,14 @@ fn spawn_bridge_thread(
                 }
                 PtyEvent::GridUpdate(rows) => {
                     if let Err(e) =
-                        app_handle.emit(&format!("pty:grid-update:{}", session_id), rows.clone())
+                        app_handle.emit(&format!("pty:grid-update:{}", session_id), rows)
                     {
                         eprintln!("[pty:{}] Failed to emit grid-update: {}", session_id, e);
                     }
                 }
                 PtyEvent::Error(err) => {
                     if let Err(emit_err) =
-                        app_handle.emit(&format!("pty:error:{}", session_id), err.clone())
+                        app_handle.emit(&format!("pty:error:{}", session_id), err)
                     {
                         eprintln!("[pty:{}] Failed to emit error: {}", session_id, emit_err);
                     }

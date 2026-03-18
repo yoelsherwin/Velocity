@@ -51,11 +51,13 @@ function TerminalGrid({ rows, onKeyDown }: TerminalGridProps) {
     gridRef.current?.focus();
   }, []);
 
-  // Re-focus if we lose focus (e.g., user clicks elsewhere)
+  // Re-focus if we lose focus, but only when the window is still active
+  // and the user hasn't moved focus to a dialog or modal
   const handleBlur = useCallback(() => {
-    // Small delay to allow for intentional focus changes
     setTimeout(() => {
-      gridRef.current?.focus();
+      if (document.hasFocus() && gridRef.current && !document.activeElement?.closest('dialog, [role="dialog"]')) {
+        gridRef.current.focus();
+      }
     }, 10);
   }, []);
 

@@ -95,4 +95,53 @@ describe('encodeKey', () => {
     expect(encodeKey(makeKey('Alt'))).toBeNull();
     expect(encodeKey(makeKey('Meta'))).toBeNull();
   });
+
+  it('test_key_encoder_shift_arrow_keys', () => {
+    // Shift+ArrowUp = \x1b[1;2A (modifier 2 = 1 + shift)
+    expect(encodeKey(makeKey('ArrowUp', { shiftKey: true }))).toBe('\x1b[1;2A');
+    expect(encodeKey(makeKey('ArrowDown', { shiftKey: true }))).toBe('\x1b[1;2B');
+    expect(encodeKey(makeKey('ArrowRight', { shiftKey: true }))).toBe('\x1b[1;2C');
+    expect(encodeKey(makeKey('ArrowLeft', { shiftKey: true }))).toBe('\x1b[1;2D');
+  });
+
+  it('test_key_encoder_ctrl_arrow_keys', () => {
+    // Ctrl+ArrowUp = \x1b[1;5A (modifier 5 = 1 + ctrl)
+    expect(encodeKey(makeKey('ArrowUp', { ctrlKey: true }))).toBe('\x1b[1;5A');
+    expect(encodeKey(makeKey('ArrowDown', { ctrlKey: true }))).toBe('\x1b[1;5B');
+    expect(encodeKey(makeKey('ArrowRight', { ctrlKey: true }))).toBe('\x1b[1;5C');
+    expect(encodeKey(makeKey('ArrowLeft', { ctrlKey: true }))).toBe('\x1b[1;5D');
+  });
+
+  it('test_key_encoder_alt_arrow_keys', () => {
+    // Alt+ArrowUp = \x1b[1;3A (modifier 3 = 1 + alt)
+    expect(encodeKey(makeKey('ArrowUp', { altKey: true }))).toBe('\x1b[1;3A');
+    expect(encodeKey(makeKey('ArrowDown', { altKey: true }))).toBe('\x1b[1;3B');
+    expect(encodeKey(makeKey('ArrowRight', { altKey: true }))).toBe('\x1b[1;3C');
+    expect(encodeKey(makeKey('ArrowLeft', { altKey: true }))).toBe('\x1b[1;3D');
+  });
+
+  it('test_key_encoder_shift_ctrl_arrow', () => {
+    // Shift+Ctrl+ArrowUp = \x1b[1;6A (modifier 6 = 1 + shift + ctrl)
+    expect(encodeKey(makeKey('ArrowUp', { shiftKey: true, ctrlKey: true }))).toBe('\x1b[1;6A');
+  });
+
+  it('test_key_encoder_modifier_navigation_keys', () => {
+    // Shift+Home = \x1b[1;2H
+    expect(encodeKey(makeKey('Home', { shiftKey: true }))).toBe('\x1b[1;2H');
+    // Ctrl+End = \x1b[1;5F
+    expect(encodeKey(makeKey('End', { ctrlKey: true }))).toBe('\x1b[1;5F');
+    // Shift+PageUp = \x1b[5;2~
+    expect(encodeKey(makeKey('PageUp', { shiftKey: true }))).toBe('\x1b[5;2~');
+    // Shift+Delete = \x1b[3;2~
+    expect(encodeKey(makeKey('Delete', { shiftKey: true }))).toBe('\x1b[3;2~');
+  });
+
+  it('test_key_encoder_modifier_function_keys', () => {
+    // Shift+F1 = \x1b[1;2P
+    expect(encodeKey(makeKey('F1', { shiftKey: true }))).toBe('\x1b[1;2P');
+    // Ctrl+F5 = \x1b[15;5~
+    expect(encodeKey(makeKey('F5', { ctrlKey: true }))).toBe('\x1b[15;5~');
+    // Alt+F12 = \x1b[24;3~
+    expect(encodeKey(makeKey('F12', { altKey: true }))).toBe('\x1b[24;3~');
+  });
 });
