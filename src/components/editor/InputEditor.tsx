@@ -31,8 +31,12 @@ function InputEditor({ value, onChange, onSubmit, disabled, ghostText, onNavigat
         onSubmit(value);
       } else if (e.key === 'Tab') {
         e.preventDefault();
-        if (ghostText) {
-          // Accept ghost text suggestion
+        if (ghostText && onTab) {
+          // Delegate ghost text acceptance to parent (Terminal) which uses
+          // completions.accept() for correct replacement semantics
+          onTab();
+        } else if (ghostText) {
+          // No onTab handler — accept ghost text by appending (history suggestion)
           onChange(value + ghostText);
         } else if (onTab) {
           // Delegate to parent (Terminal) for completion cycling
@@ -113,7 +117,15 @@ function InputEditor({ value, onChange, onSubmit, disabled, ghostText, onNavigat
           className="editor-textarea"
           data-testid="editor-textarea"
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => {
+            onChange(e.target.value);
+            // Fire cursor change immediately on input so completion context
+            // uses the actual cursor position, not a stale value
+            if (onCursorChange) {
+              const pos = e.target.selectionStart;
+              onCursorChange(pos);
+            }
+          }}
           onKeyDown={handleKeyDown}
           onKeyUp={handleCursorChange}
           onClick={handleCursorChange}

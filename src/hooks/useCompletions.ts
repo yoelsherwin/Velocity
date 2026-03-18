@@ -58,6 +58,15 @@ export function useCompletions(
     return null;
   }, [input, history]);
 
+  // Clean up debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+    };
+  }, []);
+
   // Reset completions when input or cursor changes
   useEffect(() => {
     if (input !== prevInputRef.current || cursorPos !== prevCursorRef.current) {

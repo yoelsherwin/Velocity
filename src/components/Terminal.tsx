@@ -119,6 +119,7 @@ function Terminal({ paneId }: TerminalProps) {
         const unlistenOutput = await listen<string>(
           `pty:output:${sid}`,
           (event) => {
+            let commandCompleted = false;
             setBlocks((prev) =>
               prev.map((b) => {
                 if (b.id !== activeBlockIdRef.current) return b;
@@ -128,6 +129,9 @@ function Terminal({ paneId }: TerminalProps) {
                   newOutput = TRUNCATION_MARKER + newOutput.slice(-OUTPUT_LIMIT_PER_BLOCK);
                 }
                 const { cleanOutput, exitCode } = extractExitCode(newOutput);
+                if (exitCode !== null) {
+                  commandCompleted = true;
+                }
                 return {
                   ...b,
                   output: cleanOutput,
@@ -135,6 +139,13 @@ function Terminal({ paneId }: TerminalProps) {
                 };
               }),
             );
+            // Re-fetch CWD after command completes so path completions use the
+            // current directory. MVP limitation: the child shell's CWD (e.g. after
+            // `cd`) is not directly observable from the parent process, so this
+            // returns the Tauri process CWD which may differ from the shell's CWD.
+            if (commandCompleted) {
+              getCwd().then(setCwd).catch(() => {});
+            }
           },
         );
 
@@ -371,7 +382,6 @@ function Terminal({ paneId }: TerminalProps) {
   const handleInputChange = useCallback(
     (newValue: string) => {
       setInput(newValue);
-      setCursorPos(newValue.length);
       setDraft(newValue);
       reset();
       // Clear agent error when user starts typing
@@ -380,6 +390,7 @@ function Terminal({ paneId }: TerminalProps) {
       if (!modeOverride) {
         setInputMode(classifyIntent(newValue, knownCommands));
       }
+      // Cursor position is updated via onCursorChange from InputEditor
     },
     [setDraft, reset, modeOverride, knownCommands],
   );
@@ -393,11 +404,27 @@ function Terminal({ paneId }: TerminalProps) {
   }, []);
 
   const handleTab = useCallback(() => {
-    // Called by InputEditor when Tab is pressed and no ghost text is showing.
-    // Trigger completion cycling — cycleNext populates completions on first call,
-    // or cycles to the next candidate on subsequent calls.
-    completions.cycleNext();
-  }, [completions]);
+    // Called by InputEditor when Tab is pressed — either to accept visible ghost
+    // text or to trigger/cycle completions.
+    if (completions.suggestion && completions.completionIndex >= 0) {
+      // Active tab completion with ghost text showing — accept it using the
+      // proper replace semantics (handles mid-input cursor positions correctly)
+      const newValue = completions.accept();
+      if (newValue !== null) {
+        setInput(newValue);
+        setCursorPos(newValue.length);
+      }
+    } else if (completions.suggestion && completions.completionIndex === -1) {
+      // History ghost text — append to end (existing behavior)
+      setInput(input + completions.suggestion);
+      setCursorPos((input + completions.suggestion).length);
+    } else {
+      // No ghost text — trigger completion cycling. cycleNext populates
+      // completions on first call, or cycles to the next candidate on
+      // subsequent calls.
+      completions.cycleNext();
+    }
+  }, [completions.cycleNext, completions.suggestion, completions.completionIndex, completions.accept, input]);
 
   const handleCursorChange = useCallback((pos: number) => {
     setCursorPos(pos);

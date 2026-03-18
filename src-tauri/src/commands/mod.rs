@@ -2,7 +2,12 @@ use crate::llm;
 use crate::pty::SessionManager;
 use crate::settings::{self, AppSettings};
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 use tauri::State;
+
+/// Cached known commands with TTL to avoid re-scanning PATH on every Tab press.
+static COMMAND_CACHE: std::sync::LazyLock<Mutex<Option<(Instant, Vec<String>)>>> =
+    std::sync::LazyLock::new(|| Mutex::new(None));
 
 pub struct AppState {
     pub session_manager: Arc<Mutex<SessionManager>>,
@@ -301,10 +306,27 @@ fn compute_path_completions(partial: &str, cwd: &str) -> Result<Vec<String>, Str
     Ok(results)
 }
 
+/// Returns a cached copy of known commands, refreshing if older than 30 seconds.
+fn get_cached_commands() -> Vec<String> {
+    const TTL_SECS: u64 = 30;
+
+    let mut cache = COMMAND_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+
+    if let Some((cached_at, ref commands)) = *cache {
+        if cached_at.elapsed().as_secs() < TTL_SECS {
+            return commands.clone();
+        }
+    }
+
+    let commands = collect_known_commands();
+    *cache = Some((Instant::now(), commands.clone()));
+    commands
+}
+
 fn compute_command_completions(partial: &str) -> Result<Vec<String>, String> {
     const MAX_RESULTS: usize = 50;
 
-    let commands = collect_known_commands();
+    let commands = get_cached_commands();
     let partial_lower = partial.to_lowercase();
 
     let mut results: Vec<String> = commands

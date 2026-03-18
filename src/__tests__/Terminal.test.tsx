@@ -1185,9 +1185,11 @@ describe('Terminal Component', () => {
       expect(mockInvoke).toHaveBeenCalledWith('get_known_commands');
     });
 
-    const textarea = screen.getByTestId('editor-textarea');
+    const textarea = screen.getByTestId('editor-textarea') as HTMLTextAreaElement;
 
     // Type a partial command that doesn't match history
+    // Set selectionStart to end of value so cursor position is reported correctly
+    Object.defineProperty(textarea, 'selectionStart', { value: 2, writable: true, configurable: true });
     fireEvent.change(textarea, { target: { value: 'gi' } });
 
     // Press Tab to trigger completions
