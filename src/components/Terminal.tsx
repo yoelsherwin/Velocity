@@ -12,7 +12,7 @@ import BlockView from './blocks/BlockView';
 import InputEditor from './editor/InputEditor';
 import SearchBar from './SearchBar';
 import { useCommandHistory } from '../hooks/useCommandHistory';
-import { useGhostText } from '../hooks/useGhostText';
+import { useCompletions } from '../hooks/useCompletions';
 import { useBlockVisibility } from '../hooks/useBlockVisibility';
 import { useSearch } from '../hooks/useSearch';
 import { HighlightRange } from './AnsiOutput';
@@ -65,8 +65,11 @@ function Terminal({ paneId }: TerminalProps) {
   const [modeOverride, setModeOverride] = useState(false);
   const knownCommands = useKnownCommands();
 
+  const [cursorPos, setCursorPos] = useState(0);
+  const [cwd, setCwd] = useState('C:\\');
+
   const { history, addCommand, navigateUp, navigateDown, reset, setDraft } = useCommandHistory();
-  const { suggestion } = useGhostText(input, history);
+  const completions = useCompletions(input, cursorPos, history, knownCommands, cwd);
   const { visibleIds, observeBlock } = useBlockVisibility();
   const search = useSearch(blocks);
 
@@ -243,6 +246,11 @@ function Terminal({ paneId }: TerminalProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Fetch CWD for completions
+  useEffect(() => {
+    getCwd().then(setCwd).catch(() => {});
+  }, []);
+
   // Auto-scroll to bottom when blocks update
   useEffect(() => {
     if (outputRef.current) {
@@ -363,6 +371,7 @@ function Terminal({ paneId }: TerminalProps) {
   const handleInputChange = useCallback(
     (newValue: string) => {
       setInput(newValue);
+      setCursorPos(newValue.length);
       setDraft(newValue);
       reset();
       // Clear agent error when user starts typing
@@ -381,6 +390,17 @@ function Terminal({ paneId }: TerminalProps) {
       confidence: 'high',
     }));
     setModeOverride(true);
+  }, []);
+
+  const handleTab = useCallback(() => {
+    // Called by InputEditor when Tab is pressed and no ghost text is showing.
+    // Trigger completion cycling — cycleNext populates completions on first call,
+    // or cycles to the next candidate on subsequent calls.
+    completions.cycleNext();
+  }, [completions]);
+
+  const handleCursorChange = useCallback((pos: number) => {
+    setCursorPos(pos);
   }, []);
 
   const handleNavigateUp = useCallback(() => {
@@ -617,12 +637,14 @@ function Terminal({ paneId }: TerminalProps) {
             onChange={handleInputChange}
             onSubmit={handleSubmit}
             disabled={closed || agentLoading}
-            ghostText={suggestion}
+            ghostText={completions.suggestion}
             onNavigateUp={handleNavigateUp}
             onNavigateDown={handleNavigateDown}
             mode={inputMode}
             onToggleMode={handleToggleMode}
             textareaRef={editorRef}
+            onTab={handleTab}
+            onCursorChange={handleCursorChange}
           />
           {agentError && (
             <div className="agent-error" data-testid="agent-error">

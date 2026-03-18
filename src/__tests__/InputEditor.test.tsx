@@ -161,4 +161,41 @@ describe('InputEditor Component', () => {
     // onChange should NOT be called — Terminal handles state update directly
     expect(onChange).not.toHaveBeenCalled();
   });
+
+  // --- Task 022: Tab completions tests ---
+
+  it('test_tab_calls_on_tab_callback', () => {
+    const onTab = vi.fn();
+    const onChange = vi.fn();
+    render(
+      <InputEditor
+        {...defaultProps}
+        value="gi"
+        onChange={onChange}
+        ghostText={null}
+        onTab={onTab}
+      />,
+    );
+    const textarea = screen.getByTestId('editor-textarea');
+    fireEvent.keyDown(textarea, { key: 'Tab' });
+    // onTab should be called when provided and no ghost text
+    expect(onTab).toHaveBeenCalled();
+    // onChange should NOT have been called (no space insertion when onTab is provided)
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('test_cursor_change_callback', () => {
+    const onCursorChange = vi.fn();
+    render(
+      <InputEditor
+        {...defaultProps}
+        value="hello"
+        onCursorChange={onCursorChange}
+      />,
+    );
+    const textarea = screen.getByTestId('editor-textarea');
+    // Simulate keyup which should report cursor position
+    fireEvent.keyUp(textarea, { key: 'h' });
+    expect(onCursorChange).toHaveBeenCalled();
+  });
 });

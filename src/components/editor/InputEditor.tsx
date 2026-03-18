@@ -14,9 +14,11 @@ interface InputEditorProps {
   mode?: ClassificationResult;
   onToggleMode?: () => void;
   textareaRef?: RefObject<HTMLTextAreaElement | null>;
+  onTab?: () => void;
+  onCursorChange?: (pos: number) => void;
 }
 
-function InputEditor({ value, onChange, onSubmit, disabled, ghostText, onNavigateUp, onNavigateDown, mode, onToggleMode, textareaRef: externalRef }: InputEditorProps) {
+function InputEditor({ value, onChange, onSubmit, disabled, ghostText, onNavigateUp, onNavigateDown, mode, onToggleMode, textareaRef: externalRef, onTab, onCursorChange }: InputEditorProps) {
   const internalRef = useRef<HTMLTextAreaElement>(null);
   const textareaRef = externalRef || internalRef;
 
@@ -32,6 +34,9 @@ function InputEditor({ value, onChange, onSubmit, disabled, ghostText, onNavigat
         if (ghostText) {
           // Accept ghost text suggestion
           onChange(value + ghostText);
+        } else if (onTab) {
+          // Delegate to parent (Terminal) for completion cycling
+          onTab();
         } else {
           // Insert 2 spaces at cursor position
           const textarea = textareaRef.current;
@@ -73,8 +78,14 @@ function InputEditor({ value, onChange, onSubmit, disabled, ghostText, onNavigat
         }
       }
     },
-    [value, onSubmit, onChange, ghostText, onNavigateUp, onNavigateDown],
+    [value, onSubmit, onChange, ghostText, onNavigateUp, onNavigateDown, onTab],
   );
+
+  const handleCursorChange = useCallback(() => {
+    if (onCursorChange && textareaRef.current) {
+      onCursorChange(textareaRef.current.selectionStart);
+    }
+  }, [onCursorChange, textareaRef]);
 
   return (
     <div className="input-editor" data-testid="input-editor">
@@ -104,6 +115,8 @@ function InputEditor({ value, onChange, onSubmit, disabled, ghostText, onNavigat
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={handleKeyDown}
+          onKeyUp={handleCursorChange}
+          onClick={handleCursorChange}
           rows={1}
           disabled={disabled}
           autoFocus

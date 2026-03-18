@@ -1157,4 +1157,48 @@ describe('Terminal Component', () => {
     const highlights = document.querySelectorAll('.search-highlight');
     expect(highlights.length).toBe(0);
   });
+
+  // --- Task 022: Tab completion integration tests ---
+
+  it('test_tab_completion_shows_ghost_text', async () => {
+    // Mock get_completions to return command completions
+    mockInvoke.mockImplementation((cmd: string, args?: Record<string, unknown>) => {
+      if (cmd === 'get_known_commands') {
+        return Promise.resolve(['git', 'grep', 'go', 'dir', 'echo', 'npm', 'docker', 'kubectl', 'cd', 'cls', 'find']);
+      }
+      if (cmd === 'get_completions') {
+        if (args && (args as { context: string }).context === 'path') {
+          return Promise.resolve(['components/', 'configs/']);
+        }
+        return Promise.resolve([]);
+      }
+      return Promise.reject(`Unknown command: ${cmd}`);
+    });
+
+    render(<Terminal />);
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    // Wait for known commands to load
+    await waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith('get_known_commands');
+    });
+
+    const textarea = screen.getByTestId('editor-textarea');
+
+    // Type a partial command that doesn't match history
+    fireEvent.change(textarea, { target: { value: 'gi' } });
+
+    // Press Tab to trigger completions
+    fireEvent.keyDown(textarea, { key: 'Tab' });
+
+    // Ghost text should appear showing "t" (completing "gi" -> "git")
+    await waitFor(() => {
+      const editor = screen.getByTestId('input-editor');
+      const ghostSpan = editor.querySelector('.ghost-text');
+      expect(ghostSpan).not.toBeNull();
+      expect(ghostSpan!.textContent).toBe('t');
+    });
+  });
 });
