@@ -156,6 +156,43 @@ function Terminal({ paneId }: TerminalProps) {
           return;
         }
 
+        const unlistenOutputReplace = await listen<string>(
+          `pty:output-replace:${sid}`,
+          (event) => {
+            let commandCompleted = false;
+            setBlocks((prev) =>
+              prev.map((b) => {
+                if (b.id !== activeBlockIdRef.current) return b;
+                let newOutput = event.payload;
+                // Apply per-block output cap
+                if (newOutput.length > OUTPUT_LIMIT_PER_BLOCK) {
+                  newOutput = TRUNCATION_MARKER + newOutput.slice(-OUTPUT_LIMIT_PER_BLOCK);
+                }
+                const { cleanOutput, exitCode } = extractExitCode(newOutput);
+                if (exitCode !== null) {
+                  commandCompleted = true;
+                }
+                return {
+                  ...b,
+                  output: cleanOutput,
+                  ...(exitCode !== null ? { exitCode, status: 'completed' as const } : {}),
+                };
+              }),
+            );
+            if (commandCompleted) {
+              getCwd().then(setCwd).catch(() => {});
+            }
+          },
+        );
+
+        // Check again after async listen
+        if (startSessionIdRef.current !== thisInvocation) {
+          unlistenOutput();
+          unlistenOutputReplace();
+          closeSession(sid).catch(() => {});
+          return;
+        }
+
         const unlistenError = await listen<string>(
           `pty:error:${sid}`,
           (event) => {
@@ -172,6 +209,7 @@ function Terminal({ paneId }: TerminalProps) {
         // Check again after async listen
         if (startSessionIdRef.current !== thisInvocation) {
           unlistenOutput();
+          unlistenOutputReplace();
           unlistenError();
           closeSession(sid).catch(() => {});
           return;
@@ -187,13 +225,14 @@ function Terminal({ paneId }: TerminalProps) {
         // Check again after async listen
         if (startSessionIdRef.current !== thisInvocation) {
           unlistenOutput();
+          unlistenOutputReplace();
           unlistenError();
           unlistenClosed();
           closeSession(sid).catch(() => {});
           return;
         }
 
-        unlistenRefs.current = [unlistenOutput, unlistenError, unlistenClosed];
+        unlistenRefs.current = [unlistenOutput, unlistenOutputReplace, unlistenError, unlistenClosed];
 
         // Start the reader thread NOW — all listeners are guaranteed to be
         // registered, so no output will be lost to the emit/listen race.

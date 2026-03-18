@@ -1,95 +1,67 @@
-use vte::{Params, Perform};
+/// Terminal emulator wrapper around the `vt100` crate.
+///
+/// Replaces the old `AnsiFilter` that stripped escape sequences. Instead of
+/// filtering, we process ALL sequences through a virtual terminal emulator
+/// and extract the rendered screen content. This correctly handles cursor
+/// movement, carriage return overwriting, backspace, progress bars, etc.
 
-const MAX_SEQUENCE_LENGTH: usize = 256;
-
-pub struct AnsiFilter {
-    output: String,
-    parser: vte::Parser,
+pub struct TerminalEmulator {
+    parser: vt100::Parser,
+    /// The last content sent to the frontend, for diff computation.
+    last_content: String,
 }
 
-impl AnsiFilter {
-    pub fn new() -> Self {
-        AnsiFilter {
-            output: String::new(),
-            parser: vte::Parser::new(),
-        }
-    }
-
-    /// Filter a chunk of raw PTY output bytes.
-    /// Returns a string containing only safe text + SGR sequences.
-    /// The parser is persistent across calls so that SGR sequences split
-    /// across chunk boundaries (e.g. at 4096-byte PTY reads) are handled
-    /// correctly instead of being silently dropped.
-    pub fn filter(&mut self, raw: &[u8]) -> String {
-        self.output.clear();
-        let mut parser = std::mem::take(&mut self.parser);
-        parser.advance(self, raw);
-        self.parser = parser;
-        self.output.clone()
-    }
+/// Output produced by the terminal emulator after processing a chunk.
+#[derive(Debug, Clone, PartialEq)]
+pub enum TerminalOutput {
+    /// New content to append (normal case — output simply grew)
+    Append(String),
+    /// Full content to replace block output with (overwrite case — cursor movement, \r, etc.)
+    Replace(String),
 }
 
-impl Perform for AnsiFilter {
-    fn print(&mut self, c: char) {
-        self.output.push(c);
-    }
-
-    fn execute(&mut self, byte: u8) {
-        // Keep: \n (0x0A), \r (0x0D), \t (0x09)
-        // Strip: backspace (0x08), bell (0x07) and other C0 controls
-        // Backspace is stripped because the frontend does not perform terminal
-        // emulation — it only appends text, so raw \b would accumulate invisibly.
-        match byte {
-            0x0A | 0x0D | 0x09 => self.output.push(byte as char),
-            _ => {} // Strip bell, backspace, and other C0 controls
+impl TerminalEmulator {
+    pub fn new(rows: u16, cols: u16) -> Self {
+        TerminalEmulator {
+            parser: vt100::Parser::new(rows, cols, 0),
+            last_content: String::new(),
         }
     }
 
-    fn csi_dispatch(&mut self, params: &Params, _intermediates: &[u8], _ignore: bool, action: char) {
-        if action == 'm' {
-            // SGR — reconstruct the escape sequence
-            // Build: \x1b[ + params joined by ';' + m
-            let mut reconstructed = String::from("\x1b[");
-            let mut first = true;
-            for param in params.iter() {
-                for &subparam in param {
-                    if !first {
-                        reconstructed.push(';');
-                    }
-                    reconstructed.push_str(&subparam.to_string());
-                    first = false;
-                }
-            }
-            reconstructed.push('m');
+    /// Process a chunk of raw PTY bytes through the terminal emulator.
+    /// Returns the new output to send to the frontend, or None if nothing changed.
+    pub fn process(&mut self, raw: &[u8]) -> Option<TerminalOutput> {
+        self.parser.process(raw);
+        let screen = self.parser.screen();
+        let current = screen.contents_formatted();
+        let current_str = String::from_utf8_lossy(&current).to_string();
 
-            // Defense-in-depth: vte parser caps at 32 params (making this unreachable
-            // through normal parsing), but we bound-check anyway as a safety net against
-            // future parser changes or alternative code paths.
-            if reconstructed.len() <= MAX_SEQUENCE_LENGTH {
-                self.output.push_str(&reconstructed);
-            }
+        if current_str == self.last_content {
+            return None; // No visible change
         }
-        // All other CSI actions (cursor move, erase, scroll, etc.) are stripped
+
+        // Determine if this is an append or a replacement
+        let output = if current_str.starts_with(&self.last_content) {
+            // Simple append — send just the new part
+            let new_part = current_str[self.last_content.len()..].to_string();
+            TerminalOutput::Append(new_part)
+        } else {
+            // Content was overwritten (cursor movement, \r, etc.)
+            TerminalOutput::Replace(current_str.clone())
+        };
+
+        self.last_content = current_str;
+        Some(output)
     }
 
-    fn osc_dispatch(&mut self, _params: &[&[u8]], _bell_terminated: bool) {
-        // Strip all OSC sequences (title set, hyperlinks, iTerm2 file write, etc.)
+    /// Resize the virtual terminal.
+    pub fn resize(&mut self, rows: u16, cols: u16) {
+        self.parser.set_size(rows, cols);
     }
 
-    fn hook(&mut self, _params: &Params, _intermediates: &[u8], _ignore: bool, _action: char) {
-        // Strip DCS sequences
-    }
-
-    fn put(&mut self, _byte: u8) {
-        // Strip DCS data
-    }
-
-    fn unhook(&mut self) {
-        // Strip DCS end
-    }
-
-    fn esc_dispatch(&mut self, _intermediates: &[u8], _ignore: bool, _byte: u8) {
-        // Strip raw ESC sequences
+    /// Check if the terminal is in alternate screen mode.
+    pub fn is_alternate_screen(&self) -> bool {
+        self.parser.screen().alternate_screen()
     }
 }
 
@@ -98,194 +70,210 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_plain_text_passes_through() {
-        let mut filter = AnsiFilter::new();
-        let result = filter.filter(b"hello world");
-        assert_eq!(result, "hello world");
-    }
-
-    #[test]
-    fn test_sgr_color_preserved() {
-        let mut filter = AnsiFilter::new();
-        let result = filter.filter(b"\x1b[31mred text\x1b[0m");
-        assert_eq!(result, "\x1b[31mred text\x1b[0m");
-    }
-
-    #[test]
-    fn test_sgr_bold_preserved() {
-        let mut filter = AnsiFilter::new();
-        let result = filter.filter(b"\x1b[1mbold\x1b[0m");
-        assert_eq!(result, "\x1b[1mbold\x1b[0m");
-    }
-
-    #[test]
-    fn test_sgr_multiple_params_preserved() {
-        let mut filter = AnsiFilter::new();
-        let result = filter.filter(b"\x1b[1;31;42mstyledtext\x1b[0m");
-        assert_eq!(result, "\x1b[1;31;42mstyledtext\x1b[0m");
-    }
-
-    #[test]
-    fn test_osc_title_stripped() {
-        let mut filter = AnsiFilter::new();
-        let result = filter.filter(b"\x1b]0;My Title\x07some text");
-        assert_eq!(result, "some text");
-    }
-
-    #[test]
-    fn test_osc_hyperlink_stripped() {
-        let mut filter = AnsiFilter::new();
-        let result = filter.filter(b"\x1b]8;;https://example.com\x07link\x1b]8;;\x07");
-        assert_eq!(result, "link");
-    }
-
-    #[test]
-    fn test_cursor_movement_stripped() {
-        let mut filter = AnsiFilter::new();
-        let result = filter.filter(b"\x1b[10;5Htext");
-        assert_eq!(result, "text");
-    }
-
-    #[test]
-    fn test_erase_sequence_stripped() {
-        let mut filter = AnsiFilter::new();
-        let result = filter.filter(b"\x1b[2Jtext");
-        assert_eq!(result, "text");
-    }
-
-    #[test]
-    fn test_device_query_stripped() {
-        let mut filter = AnsiFilter::new();
-        let result = filter.filter(b"\x1b[6ntext");
-        assert_eq!(result, "text");
-    }
-
-    #[test]
-    fn test_newline_preserved() {
-        let mut filter = AnsiFilter::new();
-        let result = filter.filter(b"line1\nline2\r\n");
-        assert_eq!(result, "line1\nline2\r\n");
-    }
-
-    #[test]
-    fn test_tab_preserved() {
-        let mut filter = AnsiFilter::new();
-        let result = filter.filter(b"col1\tcol2");
-        assert_eq!(result, "col1\tcol2");
-    }
-
-    #[test]
-    fn test_bell_stripped() {
-        let mut filter = AnsiFilter::new();
-        let result = filter.filter(b"text\x07more");
-        assert_eq!(result, "textmore");
-    }
-
-    #[test]
-    fn test_empty_input() {
-        let mut filter = AnsiFilter::new();
-        let result = filter.filter(b"");
-        assert_eq!(result, "");
-    }
-
-    #[test]
-    fn test_sgr_oversize_rejected() {
-        // Defense-in-depth test: The vte parser caps at 32 params, so we cannot
-        // generate a >256 byte SGR through normal parsing. The MAX_SEQUENCE_LENGTH
-        // bound check in csi_dispatch is unreachable via vte but exists as a safety
-        // net against future parser changes or alternative code paths.
-        // We verify the constant is set and that normal SGR sequences pass through.
-        assert_eq!(MAX_SEQUENCE_LENGTH, 256);
-
-        // Test that a normal SGR within bounds passes through
-        let mut filter = AnsiFilter::new();
-        let result = filter.filter(b"\x1b[1;31;42m");
-        assert_eq!(result, "\x1b[1;31;42m");
-
-        // Test with 32 params (vte's max) — should still be under 256 bytes
-        let mut seq = Vec::new();
-        seq.push(0x1b);
-        seq.push(b'[');
-        for i in 0..32u16 {
-            if i > 0 {
-                seq.push(b';');
+    fn test_emulator_plain_text() {
+        let mut emu = TerminalEmulator::new(24, 80);
+        let result = emu.process(b"hello world");
+        assert!(result.is_some());
+        match result.unwrap() {
+            TerminalOutput::Append(s) | TerminalOutput::Replace(s) => {
+                assert!(s.contains("hello world"), "Expected 'hello world' in output, got: {}", s);
             }
-            let num = format!("{}", 100 + i);
-            seq.extend_from_slice(num.as_bytes());
         }
-        seq.push(b'm');
-        seq.extend_from_slice(b"text");
-
-        let result = filter.filter(&seq);
-        // 32 params of 3 digits each = ~130 bytes, well under 256, so it should pass
-        assert!(result.contains("text"));
-        assert!(result.contains("\x1b["));
     }
 
     #[test]
-    fn test_mixed_safe_and_unsafe() {
-        let mut filter = AnsiFilter::new();
-        let result = filter.filter(b"\x1b[31mred\x1b[0m\x1b]0;title\x07\x1b[1;5Hnormal");
-        assert_eq!(result, "\x1b[31mred\x1b[0mnormal");
+    fn test_emulator_sgr_preserved() {
+        let mut emu = TerminalEmulator::new(24, 80);
+        let result = emu.process(b"\x1b[31mred text\x1b[0m");
+        assert!(result.is_some());
+        match result.unwrap() {
+            TerminalOutput::Append(s) | TerminalOutput::Replace(s) => {
+                assert!(s.contains("red text"), "Expected 'red text', got: {}", s);
+                // vt100 contents_formatted() should include SGR codes
+                assert!(s.contains("\x1b["), "Expected SGR escape in output, got: {:?}", s);
+            }
+        }
     }
 
     #[test]
-    fn test_backspace_stripped() {
-        let mut filter = AnsiFilter::new();
-        let result = filter.filter(b"abc\x08def");
-        // Backspace (0x08) should be stripped since the frontend doesn't emulate it
-        assert_eq!(result, "abcdef");
+    fn test_emulator_carriage_return() {
+        let mut emu = TerminalEmulator::new(24, 80);
+        let result = emu.process(b"hello\rworld");
+        assert!(result.is_some());
+        match result.unwrap() {
+            TerminalOutput::Append(s) | TerminalOutput::Replace(s) => {
+                // "hello\rworld" should overwrite "hello" with "world"
+                assert!(s.contains("world"), "Expected 'world' in output, got: {:?}", s);
+                assert!(!s.contains("hello"), "Expected 'hello' to be overwritten, got: {:?}", s);
+            }
+        }
     }
 
     #[test]
-    fn test_256_color_preserved() {
-        let mut filter = AnsiFilter::new();
-        let result = filter.filter(b"\x1b[38;5;196mred\x1b[0m");
-        assert!(result.contains("\x1b[38;5;196m"), "256-color foreground should be preserved, got: {}", result);
-        assert!(result.contains("red"));
+    fn test_emulator_backspace() {
+        let mut emu = TerminalEmulator::new(24, 80);
+        let result = emu.process(b"abc\x08d");
+        assert!(result.is_some());
+        match result.unwrap() {
+            TerminalOutput::Append(s) | TerminalOutput::Replace(s) => {
+                // "abc\x08d" should produce "abd" (backspace moves cursor, 'd' overwrites 'c')
+                assert!(s.contains("abd"), "Expected 'abd', got: {:?}", s);
+            }
+        }
     }
 
     #[test]
-    fn test_truecolor_preserved() {
-        let mut filter = AnsiFilter::new();
-        let result = filter.filter(b"\x1b[38;2;255;100;0morange\x1b[0m");
-        assert!(result.contains("\x1b[38;2;255;100;0m"), "Truecolor foreground should be preserved, got: {}", result);
-        assert!(result.contains("orange"));
+    fn test_emulator_cursor_up() {
+        let mut emu = TerminalEmulator::new(24, 80);
+        let result = emu.process(b"line1\nline2\x1b[Aoverwrite");
+        assert!(result.is_some());
+        match result.unwrap() {
+            TerminalOutput::Append(s) | TerminalOutput::Replace(s) => {
+                // Cursor up should move to line1 and overwrite with "overwrite"
+                // line1 starts with "line1", cursor up puts us on that line at col 5
+                // Then "overwrite" overwrites from there
+                assert!(s.contains("overwrite"), "Expected 'overwrite', got: {:?}", s);
+            }
+        }
     }
 
     #[test]
-    fn test_256_color_background() {
-        let mut filter = AnsiFilter::new();
-        let result = filter.filter(b"\x1b[48;5;21mblue bg\x1b[0m");
-        assert!(result.contains("\x1b[48;5;21m"), "256-color background should be preserved, got: {}", result);
-        assert!(result.contains("blue bg"));
+    fn test_emulator_clear_screen() {
+        let mut emu = TerminalEmulator::new(24, 80);
+        // First write some text
+        emu.process(b"some text here");
+        // Then clear screen
+        let result = emu.process(b"\x1b[2J");
+        // After clear, the screen should be empty (or contain just whitespace)
+        // The result could be None (if screen is empty == last_content was empty)
+        // or Replace with empty/whitespace content
+        if let Some(output) = result {
+            match output {
+                TerminalOutput::Replace(s) => {
+                    // After clear screen, the visible text content should be gone
+                    assert!(!s.contains("some text here"), "Expected text to be cleared, got: {:?}", s);
+                }
+                TerminalOutput::Append(s) => {
+                    // This shouldn't happen, but if it does, the old text should be gone
+                    assert!(!s.contains("some text here"), "Expected text to be cleared, got: {:?}", s);
+                }
+            }
+        }
+        // If None, it means the screen content didn't change visually (empty to empty)
     }
 
     #[test]
-    fn test_truecolor_background() {
-        let mut filter = AnsiFilter::new();
-        let result = filter.filter(b"\x1b[48;2;0;128;255mbg\x1b[0m");
-        assert!(result.contains("\x1b[48;2;0;128;255m"), "Truecolor background should be preserved, got: {}", result);
-        assert!(result.contains("bg"));
+    fn test_emulator_progress_bar() {
+        let mut emu = TerminalEmulator::new(24, 80);
+        let result = emu.process(b"[###       ] 30%\r[######    ] 60%\r[##########] 100%");
+        assert!(result.is_some());
+        match result.unwrap() {
+            TerminalOutput::Append(s) | TerminalOutput::Replace(s) => {
+                assert!(s.contains("100%"), "Expected '100%' in output, got: {:?}", s);
+                // Should NOT contain the old percentages as separate lines
+                assert!(!s.contains("30%"), "Expected '30%' to be overwritten, got: {:?}", s);
+            }
+        }
     }
 
     #[test]
-    fn test_parser_persists_across_chunks() {
-        // Simulate an SGR sequence split across two PTY read chunks.
-        // With a persistent parser, the sequence is reassembled correctly.
-        let mut filter = AnsiFilter::new();
+    fn test_emulator_append_detection() {
+        let mut emu = TerminalEmulator::new(24, 80);
+        // First chunk
+        let result1 = emu.process(b"hello ");
+        assert!(result1.is_some());
+        // Second chunk — should be detected as append
+        let result2 = emu.process(b"world");
+        assert!(result2.is_some());
+        match result2.unwrap() {
+            TerminalOutput::Append(s) => {
+                assert!(s.contains("world"), "Expected 'world' in appended output, got: {:?}", s);
+            }
+            TerminalOutput::Replace(s) => {
+                panic!("Expected Append, got Replace: {:?}", s);
+            }
+        }
+    }
 
-        // First chunk: ESC [ 3 1 (start of SGR red)
-        let chunk1 = b"\x1b[31";
-        // Second chunk: m followed by text (completes the SGR)
-        let chunk2 = b"mred text\x1b[0m";
+    #[test]
+    fn test_emulator_overwrite_detection() {
+        let mut emu = TerminalEmulator::new(24, 80);
+        // First chunk
+        emu.process(b"hello");
+        // Carriage return + new text — should be detected as Replace
+        let result = emu.process(b"\rworld");
+        assert!(result.is_some());
+        match result.unwrap() {
+            TerminalOutput::Replace(_) => {
+                // Expected — overwrite detected
+            }
+            TerminalOutput::Append(s) => {
+                panic!("Expected Replace for carriage return overwrite, got Append: {:?}", s);
+            }
+        }
+    }
 
-        let result1 = filter.filter(chunk1);
-        let result2 = filter.filter(chunk2);
+    #[test]
+    fn test_emulator_alternate_screen_detection() {
+        let mut emu = TerminalEmulator::new(24, 80);
+        assert!(!emu.is_alternate_screen());
 
-        let combined = format!("{}{}", result1, result2);
-        // The persistent parser should reconstruct the split SGR sequence
-        assert!(combined.contains("red text"), "Split SGR should produce text output, got: {}", combined);
-        assert!(combined.contains("\x1b[31m"), "Split SGR should be reconstructed, got: {}", combined);
+        // Enter alternate screen
+        emu.process(b"\x1b[?1049h");
+        assert!(emu.is_alternate_screen());
+
+        // Exit alternate screen
+        emu.process(b"\x1b[?1049l");
+        assert!(!emu.is_alternate_screen());
+    }
+
+    #[test]
+    fn test_emulator_resize() {
+        let mut emu = TerminalEmulator::new(24, 80);
+        // Should not panic
+        emu.resize(40, 120);
+        // Process some text after resize to verify it works
+        let result = emu.process(b"after resize");
+        assert!(result.is_some());
+        match result.unwrap() {
+            TerminalOutput::Append(s) | TerminalOutput::Replace(s) => {
+                assert!(s.contains("after resize"), "Expected 'after resize', got: {:?}", s);
+            }
+        }
+    }
+
+    #[test]
+    fn test_emulator_empty_input_no_change() {
+        let mut emu = TerminalEmulator::new(24, 80);
+        // First call with empty bytes may produce initial screen state
+        let _ = emu.process(b"");
+        // Second call with empty bytes should produce no change
+        let result = emu.process(b"");
+        assert!(result.is_none(), "Expected None for second empty input (no change), got: {:?}", result);
+    }
+
+    #[test]
+    fn test_emulator_256_and_truecolor() {
+        let mut emu = TerminalEmulator::new(24, 80);
+        // 256-color
+        let result = emu.process(b"\x1b[38;5;196mred256\x1b[0m");
+        assert!(result.is_some());
+        match result.unwrap() {
+            TerminalOutput::Append(s) | TerminalOutput::Replace(s) => {
+                assert!(s.contains("red256"), "Expected 'red256', got: {:?}", s);
+                // vt100 should preserve SGR codes in contents_formatted()
+                assert!(s.contains("\x1b["), "Expected SGR codes preserved, got: {:?}", s);
+            }
+        }
+
+        // Truecolor
+        let mut emu2 = TerminalEmulator::new(24, 80);
+        let result2 = emu2.process(b"\x1b[38;2;255;100;0morange\x1b[0m");
+        assert!(result2.is_some());
+        match result2.unwrap() {
+            TerminalOutput::Append(s) | TerminalOutput::Replace(s) => {
+                assert!(s.contains("orange"), "Expected 'orange', got: {:?}", s);
+            }
+        }
     }
 }

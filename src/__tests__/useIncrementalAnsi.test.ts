@@ -126,6 +126,27 @@ describe('useIncrementalAnsi', () => {
     expect(phase2Spans.length).toBe(freshSpans.length);
   });
 
+  it('test_incremental_ansi_handles_replacement', () => {
+    // Simulate the vt100 emulator sending a full replacement (shorter string)
+    // This exercises the full-reparse path triggered by output-replace events
+    const { result, rerender } = renderHook(
+      ({ output }) => useIncrementalAnsi(output),
+      { initialProps: { output: 'line1\nline2\nline3' } },
+    );
+
+    const initialContent = result.current.map((s) => s.content).join('');
+    expect(initialContent).toContain('line1');
+    expect(initialContent).toContain('line3');
+
+    // Replace with shorter content (simulating carriage return overwrite)
+    rerender({ output: 'overwritten' });
+
+    const replacedContent = result.current.map((s) => s.content).join('');
+    expect(replacedContent).toBe('overwritten');
+    // The old content should be gone
+    expect(replacedContent).not.toContain('line1');
+  });
+
   it('test_incremental_reparse_on_steady_state_truncation', () => {
     // Simulate the steady-state truncation scenario where the marker is already
     // present and repeated truncations produce same-length output with different

@@ -33,15 +33,20 @@ fn collect_events(
     events
 }
 
-/// Helper: collect output text from events, concatenating all Output payloads.
+/// Helper: collect output text from events.
+/// For Append events, concatenates the payloads.
+/// For Replace events, uses the last Replace payload as the base.
+/// This simulates the frontend's behavior: appends grow, replaces overwrite.
 fn collect_output_text(events: &[PtyEvent]) -> String {
-    events
-        .iter()
-        .filter_map(|e| match e {
-            PtyEvent::Output(s) => Some(s.as_str()),
-            _ => None,
-        })
-        .collect()
+    let mut result = String::new();
+    for event in events {
+        match event {
+            PtyEvent::Output(s) => result.push_str(s),
+            PtyEvent::OutputReplace(s) => result = s.clone(),
+            _ => {}
+        }
+    }
+    result
 }
 
 /// Helper: check if events contain a Closed event.
@@ -65,12 +70,12 @@ fn test_real_powershell_produces_output() {
 
     let output_count = events
         .iter()
-        .filter(|e| matches!(e, PtyEvent::Output(_)))
+        .filter(|e| matches!(e, PtyEvent::Output(_) | PtyEvent::OutputReplace(_)))
         .count();
 
     assert!(
         output_count > 0,
-        "Expected at least one Output event from PowerShell, got 0. Total events: {}",
+        "Expected at least one Output/OutputReplace event from PowerShell, got 0. Total events: {}",
         events.len()
     );
 
@@ -338,12 +343,12 @@ fn test_cursor_response_unblocks_output() {
 
     let output_events: Vec<_> = events
         .iter()
-        .filter(|e| matches!(e, PtyEvent::Output(_)))
+        .filter(|e| matches!(e, PtyEvent::Output(_) | PtyEvent::OutputReplace(_)))
         .collect();
 
     assert!(
         output_events.len() > 1,
-        "Expected more than 1 Output event (proving ConPTY is unblocked). Got {}. \
+        "Expected more than 1 Output/OutputReplace event (proving ConPTY is unblocked). Got {}. \
          If only 1 event with ~4 bytes, the cursor response likely failed.",
         output_events.len()
     );
@@ -396,15 +401,56 @@ fn test_large_output_no_truncation() {
 fn test_pty_event_variants() {
     // Verify PtyEvent enum can be constructed and Debug-printed
     let output = PtyEvent::Output("hello".to_string());
+    let output_replace = PtyEvent::OutputReplace("replaced".to_string());
     let error = PtyEvent::Error("something went wrong".to_string());
     let closed = PtyEvent::Closed;
 
     // Debug must work (derive(Debug) check)
     assert!(format!("{:?}", output).contains("Output"));
+    assert!(format!("{:?}", output_replace).contains("OutputReplace"));
     assert!(format!("{:?}", error).contains("Error"));
     assert!(format!("{:?}", closed).contains("Closed"));
 
     // Clone must work (derive(Clone) check)
     let output_clone = output.clone();
     assert!(format!("{:?}", output_clone).contains("Output"));
+}
+
+// ─── Test: Real shell carriage return (vt100 emulator integration) ──────
+
+#[test]
+fn test_real_shell_carriage_return() {
+    let mut manager = SessionManager::new();
+
+    let (session_id, rx) = manager
+        .create_session_with_channel("powershell", 24, 80)
+        .expect("Failed to create session");
+
+    // Wait for shell to be ready
+    std::thread::sleep(Duration::from_secs(1));
+
+    // Drain initial prompt output
+    let _ = collect_events(&rx, Duration::from_millis(500));
+
+    // Use Write-Host -NoNewline with \r to simulate a progress bar overwrite
+    // This writes "AAA" then carriage returns and overwrites with "BBB"
+    manager
+        .write_to_session(
+            &session_id,
+            "Write-Host -NoNewline \"AAA\"; Write-Host -NoNewline \"`rBBB\"; Write-Host ''\r",
+        )
+        .expect("Failed to write to session");
+
+    // Collect output for 3 seconds
+    let events = collect_events(&rx, Duration::from_secs(3));
+    let combined = collect_output_text(&events);
+
+    // The final output should contain "BBB" (the overwritten value)
+    assert!(
+        combined.contains("BBB"),
+        "Expected output to contain 'BBB' (overwritten text), got: {}",
+        combined
+    );
+
+    manager.close_session(&session_id).expect("Failed to close session");
 }

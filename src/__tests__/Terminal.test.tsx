@@ -422,9 +422,9 @@ describe('Terminal Component', () => {
       expect(mockStartReading).toHaveBeenCalledWith('test-session-id');
     });
 
-    // Verify the call order: createSession -> listen (3x) -> startReading
+    // Verify the call order: createSession -> listen (4x) -> startReading
     expect(mockCreateSession).toHaveBeenCalledTimes(1);
-    expect(mockListen).toHaveBeenCalledTimes(3);
+    expect(mockListen).toHaveBeenCalledTimes(4);
     expect(mockStartReading).toHaveBeenCalledTimes(1);
 
     // startReading must be called AFTER all listen calls
@@ -1156,6 +1156,85 @@ describe('Terminal Component', () => {
     // Highlights should be cleared
     const highlights = document.querySelectorAll('.search-highlight');
     expect(highlights.length).toBe(0);
+  });
+
+  // --- Task 023: vt100 terminal emulator tests ---
+
+  it('test_output_replace_event_replaces_block_output', async () => {
+    render(<Terminal />);
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    // First, append some output
+    await act(async () => {
+      const outputCallback = eventListeners['pty:output:test-session-id'];
+      if (outputCallback) {
+        outputCallback({ payload: 'initial output' });
+      }
+    });
+
+    await waitFor(() => {
+      const output = screen.getByTestId('terminal-output');
+      expect(output.textContent).toContain('initial output');
+    });
+
+    // Now send a replace event — should REPLACE the block output, not append
+    await act(async () => {
+      const replaceCallback = eventListeners['pty:output-replace:test-session-id'];
+      if (replaceCallback) {
+        replaceCallback({ payload: 'replaced output' });
+      }
+    });
+
+    await waitFor(() => {
+      const output = screen.getByTestId('terminal-output');
+      expect(output.textContent).toContain('replaced output');
+      // The initial output should be gone (replaced, not appended)
+      expect(output.textContent).not.toContain('initial output');
+    });
+  });
+
+  it('test_output_append_still_works', async () => {
+    render(<Terminal />);
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    // Send first append
+    await act(async () => {
+      const outputCallback = eventListeners['pty:output:test-session-id'];
+      if (outputCallback) {
+        outputCallback({ payload: 'chunk1' });
+      }
+    });
+
+    // Send second append
+    await act(async () => {
+      const outputCallback = eventListeners['pty:output:test-session-id'];
+      if (outputCallback) {
+        outputCallback({ payload: 'chunk2' });
+      }
+    });
+
+    // Both chunks should be present (appended)
+    await waitFor(() => {
+      const output = screen.getByTestId('terminal-output');
+      expect(output.textContent).toContain('chunk1');
+      expect(output.textContent).toContain('chunk2');
+    });
+  });
+
+  it('test_output_replace_listener_registered', async () => {
+    render(<Terminal />);
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    // The replace listener should be registered
+    await waitFor(() => {
+      expect(eventListeners).toHaveProperty('pty:output-replace:test-session-id');
+    });
   });
 
   // --- Task 022: Tab completion integration tests ---

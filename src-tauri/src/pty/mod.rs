@@ -1,4 +1,4 @@
-use crate::ansi::AnsiFilter;
+use crate::ansi::{TerminalEmulator, TerminalOutput};
 use portable_pty::{CommandBuilder, MasterPty, PtySize, Child, native_pty_system};
 use std::collections::HashMap;
 use std::io::{Read, Write};
@@ -20,8 +20,10 @@ const WATCHDOG_POLL_INTERVAL_MS: u64 = 500;
 /// Tauri events. In tests, the test code reads directly from the channel.
 #[derive(Debug, Clone)]
 pub enum PtyEvent {
-    /// Filtered ANSI output (safe text + SGR sequences only)
+    /// Terminal emulator output — append to existing block output
     Output(String),
+    /// Terminal emulator output — replace entire block output (cursor movement, \r, etc.)
+    OutputReplace(String),
     /// Read error from the PTY
     Error(String),
     /// Reader thread ended (process exited or PTY closed)
@@ -72,24 +74,29 @@ pub struct ShellSession {
     /// reader thread, ensuring output is only emitted after the frontend
     /// has registered its event listeners.
     reader: Option<Box<dyn Read + Send>>,
+    /// Terminal emulator shared between the reader thread and resize_session.
+    /// The reader thread locks briefly to process each chunk; resize_session
+    /// locks to update dimensions.
+    emulator: Arc<Mutex<TerminalEmulator>>,
 }
 
 pub struct SessionManager {
     sessions: HashMap<String, ShellSession>,
 }
 
-/// Spawn the reader thread that reads from the PTY, filters ANSI, and sends
-/// events through the channel. This is the core I/O loop used by both
-/// production (with bridge) and tests (direct channel read).
+/// Spawn the reader thread that reads from the PTY, processes through the
+/// vt100 terminal emulator, and sends events through the channel. This is the
+/// core I/O loop used by both production (with bridge) and tests (direct
+/// channel read).
 fn spawn_reader_thread(
     mut reader: Box<dyn Read + Send>,
     tx: mpsc::Sender<PtyEvent>,
     shutdown_flag: Arc<AtomicBool>,
     session_id: String,
+    emulator: Arc<Mutex<TerminalEmulator>>,
 ) {
     std::thread::spawn(move || {
         let mut buf = [0u8; 4096];
-        let mut ansi_filter = AnsiFilter::new();
         loop {
             if shutdown_flag.load(Ordering::Relaxed) {
                 break;
@@ -105,17 +112,31 @@ fn spawn_reader_thread(
                             &buf[..n.min(64)]
                         );
                     }
-                    let output = ansi_filter.filter(&buf[..n]);
+                    let event = {
+                        let mut emu = match emulator.lock() {
+                            Ok(guard) => guard,
+                            Err(_) => break, // Mutex poisoned
+                        };
+                        emu.process(&buf[..n]).map(|output| match output {
+                            TerminalOutput::Append(s) => PtyEvent::Output(s),
+                            TerminalOutput::Replace(s) => PtyEvent::OutputReplace(s),
+                        })
+                    };
                     if cfg!(debug_assertions) {
                         eprintln!(
-                            "[pty:{}] filtered: {} bytes, empty={}",
+                            "[pty:{}] emulator output: {:?}",
                             session_id,
-                            output.len(),
-                            output.is_empty()
+                            event.as_ref().map(|e| match e {
+                                PtyEvent::Output(s) => format!("Append({} bytes)", s.len()),
+                                PtyEvent::OutputReplace(s) => format!("Replace({} bytes)", s.len()),
+                                _ => format!("{:?}", e),
+                            })
                         );
                     }
-                    if tx.send(PtyEvent::Output(output)).is_err() {
-                        break;
+                    if let Some(evt) = event {
+                        if tx.send(evt).is_err() {
+                            break;
+                        }
                     }
                 }
                 Err(e) => {
@@ -216,6 +237,13 @@ fn spawn_bridge_thread(
                         app_handle.emit(&format!("pty:output:{}", session_id), output.clone())
                     {
                         eprintln!("[pty:{}] Failed to emit output: {}", session_id, e);
+                    }
+                }
+                PtyEvent::OutputReplace(output) => {
+                    if let Err(e) =
+                        app_handle.emit(&format!("pty:output-replace:{}", session_id), output.clone())
+                    {
+                        eprintln!("[pty:{}] Failed to emit output-replace: {}", session_id, e);
                     }
                 }
                 PtyEvent::Error(err) => {
@@ -321,6 +349,8 @@ impl SessionManager {
         let session_id = Uuid::new_v4().to_string();
         let shutdown = Arc::new(AtomicBool::new(false));
 
+        let emulator = Arc::new(Mutex::new(TerminalEmulator::new(rows, cols)));
+
         let session = ShellSession {
             id: session_id.clone(),
             master: Arc::new(Mutex::new(Some(pair.master))),
@@ -329,6 +359,7 @@ impl SessionManager {
             shell_type: shell_type.to_string(),
             shutdown,
             reader: Some(reader),
+            emulator,
         };
 
         self.sessions.insert(session_id.clone(), session);
@@ -393,7 +424,7 @@ impl SessionManager {
         let (tx, rx) = mpsc::channel::<PtyEvent>();
 
         // Spawn reader thread: PTY -> channel
-        spawn_reader_thread(reader, tx, shutdown_flag.clone(), sid.clone());
+        spawn_reader_thread(reader, tx, shutdown_flag.clone(), sid.clone(), session.emulator.clone());
 
         // Spawn watchdog thread: monitors child process, drops master on exit
         spawn_watchdog_thread(
@@ -437,7 +468,7 @@ impl SessionManager {
         let (tx, rx) = mpsc::channel::<PtyEvent>();
 
         // Spawn reader thread: PTY -> channel (no bridge, test reads directly)
-        spawn_reader_thread(reader, tx, shutdown_flag.clone(), sid.clone());
+        spawn_reader_thread(reader, tx, shutdown_flag.clone(), sid.clone(), session.emulator.clone());
 
         // Spawn watchdog thread: monitors child process, drops master on exit
         spawn_watchdog_thread(
@@ -496,6 +527,11 @@ impl SessionManager {
                 pixel_height: 0,
             })
             .map_err(|e| format!("Failed to resize session: {}", e))?;
+
+        // Also resize the terminal emulator so it matches the PTY dimensions
+        if let Ok(mut emu) = session.emulator.lock() {
+            emu.resize(rows, cols);
+        }
 
         Ok(())
     }
@@ -721,16 +757,20 @@ mod tests {
     fn test_pty_event_variants() {
         // Verify PtyEvent enum can be constructed and Debug-printed
         let output = PtyEvent::Output("hello".to_string());
+        let output_replace = PtyEvent::OutputReplace("replaced".to_string());
         let error = PtyEvent::Error("something went wrong".to_string());
         let closed = PtyEvent::Closed;
 
         // Debug must work (derive(Debug) check)
         assert!(format!("{:?}", output).contains("Output"));
+        assert!(format!("{:?}", output_replace).contains("OutputReplace"));
         assert!(format!("{:?}", error).contains("Error"));
         assert!(format!("{:?}", closed).contains("Closed"));
 
         // Clone must work (derive(Clone) check)
         let output_clone = output.clone();
         assert!(format!("{:?}", output_clone).contains("Output"));
+        let replace_clone = output_replace.clone();
+        assert!(format!("{:?}", replace_clone).contains("OutputReplace"));
     }
 }
