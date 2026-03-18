@@ -85,10 +85,125 @@ fn utf8_char_len(first_byte: u8) -> usize {
     }
 }
 
+/// A single cell in the terminal grid, serialized for the frontend.
+#[derive(Debug, Clone, serde::Serialize, PartialEq)]
+pub struct GridCell {
+    pub content: String,
+    pub fg: Option<String>,
+    pub bg: Option<String>,
+    pub bold: bool,
+    pub italic: bool,
+    pub underline: bool,
+    pub dim: bool,
+}
+
+/// A row of cells in the terminal grid.
+#[derive(Debug, Clone, serde::Serialize, PartialEq)]
+pub struct GridRow {
+    pub cells: Vec<GridCell>,
+}
+
+/// Convert a vt100 color to a CSS color string.
+/// Returns None for default colors (let the frontend theme handle it).
+pub fn color_to_css(color: vt100::Color) -> Option<String> {
+    match color {
+        vt100::Color::Default => None,
+        vt100::Color::Idx(idx) => Some(ansi_idx_to_css(idx)),
+        vt100::Color::Rgb(r, g, b) => Some(format!("rgb({},{},{})", r, g, b)),
+    }
+}
+
+/// Map a 256-color index to a CSS rgb() string.
+/// Colors 0-7: standard ANSI (Catppuccin Mocha mapping)
+/// Colors 8-15: bright ANSI (Catppuccin Mocha mapping)
+/// Colors 16-231: 6x6x6 color cube
+/// Colors 232-255: grayscale ramp
+fn ansi_idx_to_css(idx: u8) -> String {
+    // Catppuccin Mocha 16-color palette
+    static PALETTE_16: [(u8, u8, u8); 16] = [
+        (69, 71, 90),     // 0  black   (surface1)
+        (243, 139, 168),  // 1  red
+        (166, 227, 161),  // 2  green
+        (249, 226, 175),  // 3  yellow
+        (137, 180, 250),  // 4  blue
+        (203, 166, 247),  // 5  magenta
+        (148, 226, 213),  // 6  cyan
+        (186, 194, 222),  // 7  white   (subtext1)
+        (88, 91, 112),    // 8  bright black  (overlay0)
+        (243, 139, 168),  // 9  bright red
+        (166, 227, 161),  // 10 bright green
+        (249, 226, 175),  // 11 bright yellow
+        (137, 180, 250),  // 12 bright blue
+        (203, 166, 247),  // 13 bright magenta
+        (148, 226, 213),  // 14 bright cyan
+        (205, 214, 244),  // 15 bright white (text)
+    ];
+
+    if idx < 16 {
+        let (r, g, b) = PALETTE_16[idx as usize];
+        return format!("rgb({},{},{})", r, g, b);
+    }
+
+    if idx < 232 {
+        // 6x6x6 color cube: index 16-231
+        let i = idx - 16;
+        let ri = i / 36;
+        let gi = (i % 36) / 6;
+        let bi = i % 6;
+        let r = if ri == 0 { 0 } else { 55 + ri * 40 };
+        let g = if gi == 0 { 0 } else { 55 + gi * 40 };
+        let b = if bi == 0 { 0 } else { 55 + bi * 40 };
+        return format!("rgb({},{},{})", r, g, b);
+    }
+
+    // Grayscale ramp: index 232-255
+    let level = 8 + (idx - 232) * 10;
+    format!("rgb({},{},{})", level, level, level)
+}
+
+/// Extract the full grid state from a vt100 screen.
+pub fn extract_grid(screen: &vt100::Screen, rows: u16, cols: u16) -> Vec<GridRow> {
+    let mut grid = Vec::with_capacity(rows as usize);
+    for row in 0..rows {
+        let mut cells = Vec::with_capacity(cols as usize);
+        for col in 0..cols {
+            if let Some(cell) = screen.cell(row, col) {
+                cells.push(GridCell {
+                    content: cell.contents().to_string(),
+                    fg: color_to_css(cell.fgcolor()),
+                    bg: color_to_css(cell.bgcolor()),
+                    bold: cell.bold(),
+                    italic: cell.italic(),
+                    underline: cell.underline(),
+                    dim: false, // vt100 0.15 does not expose faint/dim
+                });
+            } else {
+                cells.push(GridCell {
+                    content: " ".to_string(),
+                    fg: None,
+                    bg: None,
+                    bold: false,
+                    italic: false,
+                    underline: false,
+                    dim: false,
+                });
+            }
+        }
+        grid.push(GridRow { cells });
+    }
+    grid
+}
+
 pub struct TerminalEmulator {
     parser: vt100::Parser,
     /// The last content sent to the frontend, for diff computation.
     last_content: String,
+    /// Track the current alternate screen state for transition detection.
+    was_alternate_screen: bool,
+    /// Rows for grid extraction.
+    rows: u16,
+    /// Cols for grid extraction.
+    cols: u16,
 }
 
 /// Output produced by the terminal emulator after processing a chunk.
@@ -105,6 +220,9 @@ impl TerminalEmulator {
         TerminalEmulator {
             parser: vt100::Parser::new(rows, cols, 0),
             last_content: String::new(),
+            was_alternate_screen: false,
+            rows,
+            cols,
         }
     }
 
@@ -153,12 +271,36 @@ impl TerminalEmulator {
 
     /// Resize the virtual terminal.
     pub fn resize(&mut self, rows: u16, cols: u16) {
+        self.rows = rows;
+        self.cols = cols;
         self.parser.set_size(rows, cols);
     }
 
     /// Check if the terminal is in alternate screen mode.
     pub fn is_alternate_screen(&self) -> bool {
         self.parser.screen().alternate_screen()
+    }
+
+    /// Check if the alt screen state changed since last call to `consume_alt_screen_transition`.
+    /// Returns Some(true) if entered alt screen, Some(false) if exited, None if no change.
+    pub fn consume_alt_screen_transition(&mut self) -> Option<bool> {
+        let current = self.is_alternate_screen();
+        if current != self.was_alternate_screen {
+            self.was_alternate_screen = current;
+            Some(current)
+        } else {
+            None
+        }
+    }
+
+    /// Extract the current grid state from the vt100 screen.
+    pub fn extract_grid(&self) -> Vec<GridRow> {
+        extract_grid(self.parser.screen(), self.rows, self.cols)
+    }
+
+    /// Get the current terminal dimensions.
+    pub fn dimensions(&self) -> (u16, u16) {
+        (self.rows, self.cols)
     }
 }
 
@@ -530,6 +672,121 @@ mod tests {
         };
         verify_only_sgr_sequences(&s);
         assert!(s.contains("100%"));
+    }
+
+    // ---- Grid extraction and color conversion tests ----
+
+    #[test]
+    fn test_extract_grid_basic() {
+        let mut emu = TerminalEmulator::new(24, 80);
+        emu.process(b"Hello");
+        let grid = emu.extract_grid();
+        assert_eq!(grid.len(), 24);
+        assert_eq!(grid[0].cells.len(), 80);
+        assert_eq!(grid[0].cells[0].content, "H");
+        assert_eq!(grid[0].cells[1].content, "e");
+        assert_eq!(grid[0].cells[2].content, "l");
+        assert_eq!(grid[0].cells[3].content, "l");
+        assert_eq!(grid[0].cells[4].content, "o");
+    }
+
+    #[test]
+    fn test_extract_grid_colors() {
+        let mut emu = TerminalEmulator::new(24, 80);
+        // Red foreground text
+        emu.process(b"\x1b[31mR\x1b[0m");
+        let grid = emu.extract_grid();
+        let cell = &grid[0].cells[0];
+        assert_eq!(cell.content, "R");
+        // vt100 stores Idx(1) for color 31 (red)
+        assert!(cell.fg.is_some(), "Expected foreground color for red text");
+    }
+
+    #[test]
+    fn test_extract_grid_dimensions() {
+        let emu = TerminalEmulator::new(10, 40);
+        let grid = emu.extract_grid();
+        assert_eq!(grid.len(), 10);
+        for row in &grid {
+            assert_eq!(row.cells.len(), 40);
+        }
+    }
+
+    #[test]
+    fn test_extract_grid_bold_italic_underline() {
+        let mut emu = TerminalEmulator::new(24, 80);
+        emu.process(b"\x1b[1mB\x1b[0m\x1b[3mI\x1b[0m\x1b[4mU\x1b[0m");
+        let grid = emu.extract_grid();
+        assert!(grid[0].cells[0].bold, "Expected bold");
+        assert!(grid[0].cells[1].italic, "Expected italic");
+        assert!(grid[0].cells[2].underline, "Expected underline");
+    }
+
+    #[test]
+    fn test_color_to_css_rgb() {
+        let result = color_to_css(vt100::Color::Rgb(255, 100, 0));
+        assert_eq!(result, Some("rgb(255,100,0)".to_string()));
+    }
+
+    #[test]
+    fn test_color_to_css_idx_standard() {
+        // Index 1 should map to Catppuccin red
+        let result = color_to_css(vt100::Color::Idx(1));
+        assert_eq!(result, Some("rgb(243,139,168)".to_string()));
+    }
+
+    #[test]
+    fn test_color_to_css_idx_256_color_cube() {
+        // Index 196 = bright red in the color cube
+        let result = color_to_css(vt100::Color::Idx(196));
+        assert!(result.is_some());
+        // 196 - 16 = 180, 180/36 = 5, (180%36)/6 = 0, 180%6 = 0
+        // r = 55 + 5*40 = 255, g = 0, b = 0
+        assert_eq!(result, Some("rgb(255,0,0)".to_string()));
+    }
+
+    #[test]
+    fn test_color_to_css_idx_grayscale() {
+        // Index 232 = first grayscale (darkest)
+        let result = color_to_css(vt100::Color::Idx(232));
+        assert_eq!(result, Some("rgb(8,8,8)".to_string()));
+    }
+
+    #[test]
+    fn test_color_to_css_default() {
+        let result = color_to_css(vt100::Color::Default);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_alt_screen_transition_detection() {
+        let mut emu = TerminalEmulator::new(24, 80);
+        // Initially no transition
+        assert_eq!(emu.consume_alt_screen_transition(), None);
+
+        // Enter alt screen
+        emu.process(b"\x1b[?1049h");
+        assert_eq!(emu.consume_alt_screen_transition(), Some(true));
+        // No further transition
+        assert_eq!(emu.consume_alt_screen_transition(), None);
+
+        // Exit alt screen
+        emu.process(b"\x1b[?1049l");
+        assert_eq!(emu.consume_alt_screen_transition(), Some(false));
+        assert_eq!(emu.consume_alt_screen_transition(), None);
+    }
+
+    #[test]
+    fn test_alt_screen_grid_content() {
+        let mut emu = TerminalEmulator::new(24, 80);
+        // Enter alternate screen
+        emu.process(b"\x1b[?1049h");
+        assert!(emu.is_alternate_screen());
+        // Write text in alt screen
+        emu.process(b"\x1b[H\x1b[2JHello from alt screen");
+        let grid = emu.extract_grid();
+        assert_eq!(grid[0].cells[0].content, "H");
+        assert_eq!(grid[0].cells[1].content, "e");
     }
 
     /// Helper: assert that a string contains only text and SGR escape sequences.

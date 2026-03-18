@@ -422,9 +422,9 @@ describe('Terminal Component', () => {
       expect(mockStartReading).toHaveBeenCalledWith('test-session-id');
     });
 
-    // Verify the call order: createSession -> listen (4x) -> startReading
+    // Verify the call order: createSession -> listen (7x: 4 original + 3 alt screen) -> startReading
     expect(mockCreateSession).toHaveBeenCalledTimes(1);
-    expect(mockListen).toHaveBeenCalledTimes(4);
+    expect(mockListen).toHaveBeenCalledTimes(7);
     expect(mockStartReading).toHaveBeenCalledTimes(1);
 
     // startReading must be called AFTER all listen calls

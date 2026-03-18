@@ -812,6 +812,31 @@ html, body, #root {
   border-radius: 1px;
 }
 
+/* --- Terminal Grid Styles (Alternate Screen) --- */
+
+.terminal-grid {
+  flex: 1;
+  overflow: hidden;
+  padding: 8px;
+  color: #cdd6f4;
+  background-color: #1e1e2e;
+  font-family: 'Cascadia Code', 'Consolas', 'Courier New', monospace;
+  font-size: 14px;
+  line-height: 1.4;
+  outline: none;
+  white-space: pre;
+  cursor: text;
+}
+
+.terminal-grid:focus {
+  outline: none;
+}
+
+.terminal-grid-row {
+  height: 1.4em;
+  white-space: pre;
+}
+
 /* --- Command Palette Styles --- */
 
 .palette-overlay {

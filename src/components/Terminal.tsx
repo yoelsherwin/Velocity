@@ -7,9 +7,11 @@ import { classifyIntent, stripHashPrefix, ClassificationResult } from '../lib/in
 import { translateCommand } from '../lib/llm';
 import { getCwd } from '../lib/cwd';
 import { stripAnsi } from '../lib/ansi';
+import { encodeKey } from '../lib/key-encoder';
 import { useKnownCommands } from '../hooks/useKnownCommands';
 import BlockView from './blocks/BlockView';
 import InputEditor from './editor/InputEditor';
+import TerminalGrid, { GridRow } from './TerminalGrid';
 import SearchBar from './SearchBar';
 import { useCommandHistory } from '../hooks/useCommandHistory';
 import { useCompletions } from '../hooks/useCompletions';
@@ -53,6 +55,8 @@ function Terminal({ paneId }: TerminalProps) {
   const activeBlockIdRef = useRef<string | null>(null);
   const [input, setInput] = useState('');
   const [closed, setClosed] = useState(false);
+  const [altScreenActive, setAltScreenActive] = useState(false);
+  const [gridRows, setGridRows] = useState<GridRow[]>([]);
   const [agentLoading, setAgentLoading] = useState(false);
   const [agentError, setAgentError] = useState<string | null>(null);
   const translationIdRef = useRef(0);
@@ -232,7 +236,70 @@ function Terminal({ paneId }: TerminalProps) {
           return;
         }
 
-        unlistenRefs.current = [unlistenOutput, unlistenOutputReplace, unlistenError, unlistenClosed];
+        const unlistenAltScreenEnter = await listen<{ rows: number; cols: number }>(
+          `pty:alt-screen-enter:${sid}`,
+          () => {
+            setAltScreenActive(true);
+          },
+        );
+
+        if (startSessionIdRef.current !== thisInvocation) {
+          unlistenOutput();
+          unlistenOutputReplace();
+          unlistenError();
+          unlistenClosed();
+          unlistenAltScreenEnter();
+          closeSession(sid).catch(() => {});
+          return;
+        }
+
+        const unlistenAltScreenExit = await listen<void>(
+          `pty:alt-screen-exit:${sid}`,
+          () => {
+            setAltScreenActive(false);
+            setGridRows([]);
+          },
+        );
+
+        if (startSessionIdRef.current !== thisInvocation) {
+          unlistenOutput();
+          unlistenOutputReplace();
+          unlistenError();
+          unlistenClosed();
+          unlistenAltScreenEnter();
+          unlistenAltScreenExit();
+          closeSession(sid).catch(() => {});
+          return;
+        }
+
+        const unlistenGridUpdate = await listen<GridRow[]>(
+          `pty:grid-update:${sid}`,
+          (event) => {
+            setGridRows(event.payload);
+          },
+        );
+
+        if (startSessionIdRef.current !== thisInvocation) {
+          unlistenOutput();
+          unlistenOutputReplace();
+          unlistenError();
+          unlistenClosed();
+          unlistenAltScreenEnter();
+          unlistenAltScreenExit();
+          unlistenGridUpdate();
+          closeSession(sid).catch(() => {});
+          return;
+        }
+
+        unlistenRefs.current = [
+          unlistenOutput,
+          unlistenOutputReplace,
+          unlistenError,
+          unlistenClosed,
+          unlistenAltScreenEnter,
+          unlistenAltScreenExit,
+          unlistenGridUpdate,
+        ];
 
         // Start the reader thread NOW — all listeners are guaranteed to be
         // registered, so no output will be lost to the emit/listen race.
@@ -484,6 +551,20 @@ function Terminal({ paneId }: TerminalProps) {
     }
   }, [navigateDown]);
 
+  // Handle keyboard input when in alternate screen (grid) mode
+  const handleGridKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!sessionIdRef.current) return;
+      const encoded = encodeKey(e);
+      if (encoded !== null) {
+        writeToSession(sessionIdRef.current, encoded).catch(() => {});
+      }
+    },
+    [],
+  );
+
   // Ref for the search input element, passed to SearchBar
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -635,51 +716,60 @@ function Terminal({ paneId }: TerminalProps) {
 
   return (
     <div className="terminal-container">
-      <div className="shell-selector" role="tablist" data-testid="shell-selector">
-        {SHELL_TYPES.map((shell) => (
-          <button
-            key={shell}
-            role="tab"
-            className={`shell-btn ${shell === shellType ? 'shell-btn-active' : ''}`}
-            data-testid={`shell-btn-${shell}`}
-            aria-selected={shell === shellType}
-            onClick={() => handleShellSwitch(shell)}
-          >
-            {SHELL_LABELS[shell]}
-          </button>
-        ))}
-      </div>
-      <div
-        ref={outputRef}
-        className="terminal-output"
-        data-testid="terminal-output"
-      >
-        <SearchBar
-          query={search.query}
-          setQuery={search.setQuery}
-          caseSensitive={search.caseSensitive}
-          setCaseSensitive={search.setCaseSensitive}
-          matchCount={search.matches.length}
-          currentMatchIndex={search.currentMatchIndex}
-          goToNext={search.goToNext}
-          goToPrev={search.goToPrev}
-          isOpen={search.isOpen}
-          onClose={handleSearchClose}
-          inputRef={searchInputRef}
+      {!altScreenActive && (
+        <div className="shell-selector" role="tablist" data-testid="shell-selector">
+          {SHELL_TYPES.map((shell) => (
+            <button
+              key={shell}
+              role="tab"
+              className={`shell-btn ${shell === shellType ? 'shell-btn-active' : ''}`}
+              data-testid={`shell-btn-${shell}`}
+              aria-selected={shell === shellType}
+              onClick={() => handleShellSwitch(shell)}
+            >
+              {SHELL_LABELS[shell]}
+            </button>
+          ))}
+        </div>
+      )}
+      {altScreenActive ? (
+        <TerminalGrid
+          rows={gridRows}
+          onKeyDown={handleGridKeyDown}
         />
-        {blocks.map((block) => (
-          <BlockView
-            key={block.id}
-            block={block}
-            isActive={block.id === activeBlockIdRef.current}
-            onRerun={handleRerun}
-            isVisible={visibleIds.has(block.id)}
-            observeRef={(el) => observeBlock(block.id, el)}
-            highlights={blockHighlights.get(block.id)}
+      ) : (
+        <div
+          ref={outputRef}
+          className="terminal-output"
+          data-testid="terminal-output"
+        >
+          <SearchBar
+            query={search.query}
+            setQuery={search.setQuery}
+            caseSensitive={search.caseSensitive}
+            setCaseSensitive={search.setCaseSensitive}
+            matchCount={search.matches.length}
+            currentMatchIndex={search.currentMatchIndex}
+            goToNext={search.goToNext}
+            goToPrev={search.goToPrev}
+            isOpen={search.isOpen}
+            onClose={handleSearchClose}
+            inputRef={searchInputRef}
           />
-        ))}
-        {closed && <div className="block-process-exited">[Process exited]</div>}
-      </div>
+          {blocks.map((block) => (
+            <BlockView
+              key={block.id}
+              block={block}
+              isActive={block.id === activeBlockIdRef.current}
+              onRerun={handleRerun}
+              isVisible={visibleIds.has(block.id)}
+              observeRef={(el) => observeBlock(block.id, el)}
+              highlights={blockHighlights.get(block.id)}
+            />
+          ))}
+          {closed && <div className="block-process-exited">[Process exited]</div>}
+        </div>
+      )}
       {closed ? (
         <div className="terminal-restart-row">
           <button
@@ -690,7 +780,7 @@ function Terminal({ paneId }: TerminalProps) {
             Restart
           </button>
         </div>
-      ) : (
+      ) : !altScreenActive ? (
         <div data-testid="terminal-input">
           {agentLoading && (
             <div className="agent-loading" data-testid="agent-loading">
@@ -718,7 +808,7 @@ function Terminal({ paneId }: TerminalProps) {
             </div>
           )}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

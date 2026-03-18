@@ -1,4 +1,4 @@
-use crate::ansi::{TerminalEmulator, TerminalOutput};
+use crate::ansi::{GridRow, TerminalEmulator, TerminalOutput};
 use portable_pty::{CommandBuilder, MasterPty, PtySize, Child, native_pty_system};
 use std::collections::HashMap;
 use std::io::{Read, Write};
@@ -24,6 +24,12 @@ pub enum PtyEvent {
     Output(String),
     /// Terminal emulator output — replace entire block output (cursor movement, \r, etc.)
     OutputReplace(String),
+    /// Alternate screen entered — switch to grid rendering mode
+    AltScreenEnter { rows: u16, cols: u16 },
+    /// Alternate screen exited — switch back to block rendering mode
+    AltScreenExit,
+    /// Grid state update while in alternate screen mode
+    GridUpdate(Vec<GridRow>),
     /// Read error from the PTY
     Error(String),
     /// Reader thread ended (process exited or PTY closed)
@@ -97,6 +103,9 @@ fn spawn_reader_thread(
 ) {
     std::thread::spawn(move || {
         let mut buf = [0u8; 4096];
+        let mut last_grid_send = std::time::Instant::now();
+        let grid_throttle = std::time::Duration::from_millis(33); // ~30fps
+
         loop {
             if shutdown_flag.load(Ordering::Relaxed) {
                 break;
@@ -112,28 +121,53 @@ fn spawn_reader_thread(
                             &buf[..n.min(64)]
                         );
                     }
-                    let event = {
+                    let events: Vec<PtyEvent> = {
                         let mut emu = match emulator.lock() {
                             Ok(guard) => guard,
                             Err(_) => break, // Mutex poisoned
                         };
-                        emu.process(&buf[..n]).map(|output| match output {
-                            TerminalOutput::Append(s) => PtyEvent::Output(s),
-                            TerminalOutput::Replace(s) => PtyEvent::OutputReplace(s),
-                        })
+                        let process_output = emu.process(&buf[..n]);
+
+                        let mut evts = Vec::new();
+
+                        // Check for alt screen transition
+                        if let Some(entered) = emu.consume_alt_screen_transition() {
+                            if entered {
+                                let (rows, cols) = emu.dimensions();
+                                evts.push(PtyEvent::AltScreenEnter { rows, cols });
+                                // Send initial grid state immediately
+                                evts.push(PtyEvent::GridUpdate(emu.extract_grid()));
+                                last_grid_send = std::time::Instant::now();
+                            } else {
+                                evts.push(PtyEvent::AltScreenExit);
+                            }
+                        } else if emu.is_alternate_screen() {
+                            // While in alt screen, send throttled grid updates
+                            let now = std::time::Instant::now();
+                            if now.duration_since(last_grid_send) >= grid_throttle {
+                                evts.push(PtyEvent::GridUpdate(emu.extract_grid()));
+                                last_grid_send = now;
+                            }
+                        } else {
+                            // Normal mode: use the process output
+                            if let Some(output) = process_output {
+                                evts.push(match output {
+                                    TerminalOutput::Append(s) => PtyEvent::Output(s),
+                                    TerminalOutput::Replace(s) => PtyEvent::OutputReplace(s),
+                                });
+                            }
+                        }
+
+                        evts
                     };
                     if cfg!(debug_assertions) {
                         eprintln!(
-                            "[pty:{}] emulator output: {:?}",
+                            "[pty:{}] emulator output: {} events",
                             session_id,
-                            event.as_ref().map(|e| match e {
-                                PtyEvent::Output(s) => format!("Append({} bytes)", s.len()),
-                                PtyEvent::OutputReplace(s) => format!("Replace({} bytes)", s.len()),
-                                _ => format!("{:?}", e),
-                            })
+                            events.len(),
                         );
                     }
-                    if let Some(evt) = event {
+                    for evt in events {
                         if tx.send(evt).is_err() {
                             break;
                         }
@@ -244,6 +278,33 @@ fn spawn_bridge_thread(
                         app_handle.emit(&format!("pty:output-replace:{}", session_id), output.clone())
                     {
                         eprintln!("[pty:{}] Failed to emit output-replace: {}", session_id, e);
+                    }
+                }
+                PtyEvent::AltScreenEnter { rows, cols } => {
+                    #[derive(serde::Serialize, Clone)]
+                    struct AltScreenPayload {
+                        rows: u16,
+                        cols: u16,
+                    }
+                    if let Err(e) = app_handle.emit(
+                        &format!("pty:alt-screen-enter:{}", session_id),
+                        AltScreenPayload { rows: *rows, cols: *cols },
+                    ) {
+                        eprintln!("[pty:{}] Failed to emit alt-screen-enter: {}", session_id, e);
+                    }
+                }
+                PtyEvent::AltScreenExit => {
+                    if let Err(e) =
+                        app_handle.emit(&format!("pty:alt-screen-exit:{}", session_id), ())
+                    {
+                        eprintln!("[pty:{}] Failed to emit alt-screen-exit: {}", session_id, e);
+                    }
+                }
+                PtyEvent::GridUpdate(rows) => {
+                    if let Err(e) =
+                        app_handle.emit(&format!("pty:grid-update:{}", session_id), rows.clone())
+                    {
+                        eprintln!("[pty:{}] Failed to emit grid-update: {}", session_id, e);
                     }
                 }
                 PtyEvent::Error(err) => {
@@ -765,12 +826,18 @@ mod tests {
         // Verify PtyEvent enum can be constructed and Debug-printed
         let output = PtyEvent::Output("hello".to_string());
         let output_replace = PtyEvent::OutputReplace("replaced".to_string());
+        let alt_enter = PtyEvent::AltScreenEnter { rows: 24, cols: 80 };
+        let alt_exit = PtyEvent::AltScreenExit;
+        let grid_update = PtyEvent::GridUpdate(vec![]);
         let error = PtyEvent::Error("something went wrong".to_string());
         let closed = PtyEvent::Closed;
 
         // Debug must work (derive(Debug) check)
         assert!(format!("{:?}", output).contains("Output"));
         assert!(format!("{:?}", output_replace).contains("OutputReplace"));
+        assert!(format!("{:?}", alt_enter).contains("AltScreenEnter"));
+        assert!(format!("{:?}", alt_exit).contains("AltScreenExit"));
+        assert!(format!("{:?}", grid_update).contains("GridUpdate"));
         assert!(format!("{:?}", error).contains("Error"));
         assert!(format!("{:?}", closed).contains("Closed"));
 
@@ -779,5 +846,7 @@ mod tests {
         assert!(format!("{:?}", output_clone).contains("Output"));
         let replace_clone = output_replace.clone();
         assert!(format!("{:?}", replace_clone).contains("OutputReplace"));
+        let alt_enter_clone = alt_enter.clone();
+        assert!(format!("{:?}", alt_enter_clone).contains("AltScreenEnter"));
     }
 }
