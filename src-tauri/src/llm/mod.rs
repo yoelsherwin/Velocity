@@ -101,6 +101,309 @@ fn validate_model_for_url(model: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// A request to classify user input as CLI or natural language.
+pub struct ClassificationRequest {
+    pub input: String,
+    pub shell_type: String,
+    pub known_commands: Vec<String>,
+}
+
+/// The result of a successful classification.
+#[derive(Debug)]
+pub struct ClassificationResponse {
+    pub intent: String, // "cli" or "natural_language"
+}
+
+/// Builds the system prompt for intent classification.
+fn build_classification_prompt(shell_type: &str, known_commands: &[String]) -> String {
+    let commands_str = if known_commands.is_empty() {
+        "(none provided)".to_string()
+    } else {
+        known_commands.iter().take(10).cloned().collect::<Vec<_>>().join(", ")
+    };
+
+    format!(
+        r#"You are a terminal input classifier. Determine if the user's input is a CLI command or a natural language request.
+
+Rules:
+- Output ONLY "cli" or "natural_language". Nothing else.
+- Shell type: {}
+- Known commands on this system include: {}
+- "cli" means the input is meant to be executed directly as a shell command
+- "natural_language" means the input is a question or request in English
+
+Examples:
+Input: "git status" → cli
+Input: "show me all running processes" → natural_language
+Input: "docker compose up -d" → cli
+Input: "what ports are open" → natural_language
+Input: "netstat -an" → cli
+Input: "create a new react project" → natural_language"#,
+        shell_type, commands_str
+    )
+}
+
+/// Parses a classification response, defaulting to "cli" for invalid responses.
+fn parse_classification_response(raw: &str) -> String {
+    let trimmed = raw.trim().to_lowercase();
+    match trimmed.as_str() {
+        "cli" => "cli".to_string(),
+        "natural_language" => "natural_language".to_string(),
+        _ => "cli".to_string(), // Default to CLI for safety
+    }
+}
+
+/// Classifies user input as CLI or natural language using the configured LLM provider.
+pub async fn classify_intent(
+    settings: &AppSettings,
+    request: &ClassificationRequest,
+) -> Result<ClassificationResponse, String> {
+    if settings.api_key.is_empty() {
+        return Err("No API key configured. Open Settings to add one.".to_string());
+    }
+
+    let system_prompt = build_classification_prompt(&request.shell_type, &request.known_commands);
+    let user_message = &request.input;
+
+    let translation_result = match settings.llm_provider.as_str() {
+        "openai" => {
+            call_openai_classification(&settings.api_key, &settings.model, &system_prompt, user_message).await
+        }
+        "anthropic" => {
+            call_anthropic_classification(&settings.api_key, &settings.model, &system_prompt, user_message).await
+        }
+        "google" => {
+            call_google_classification(&settings.api_key, &settings.model, &system_prompt, user_message).await
+        }
+        "azure" => {
+            call_azure_classification(
+                &settings.api_key,
+                &settings.model,
+                settings.azure_endpoint.as_deref(),
+                &system_prompt,
+                user_message,
+            )
+            .await
+        }
+        _ => Err(format!("Unknown provider: {}", settings.llm_provider)),
+    }?;
+
+    let intent = parse_classification_response(&translation_result);
+    Ok(ClassificationResponse { intent })
+}
+
+/// Calls the OpenAI Chat Completions API for classification (low max_tokens, temperature 0).
+async fn call_openai_classification(
+    api_key: &str,
+    model: &str,
+    system_prompt: &str,
+    user_message: &str,
+) -> Result<String, String> {
+    let body = serde_json::json!({
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_message}
+        ],
+        "temperature": 0.0,
+        "max_tokens": 10
+    });
+
+    let response = http_client()
+        .post("https://api.openai.com/v1/chat/completions")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| sanitize_error(&format!("HTTP request failed: {}", e), api_key))?;
+
+    let status = response.status();
+    let json: Value = response
+        .json()
+        .await
+        .map_err(|e| sanitize_error(&format!("Failed to parse response: {}", e), api_key))?;
+
+    if !status.is_success() {
+        let error_msg = json["error"]["message"]
+            .as_str()
+            .unwrap_or("Unknown API error");
+        return Err(sanitize_error(
+            &format!("OpenAI API error ({}): {}", status, error_msg),
+            api_key,
+        ));
+    }
+
+    json["choices"][0]["message"]["content"]
+        .as_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| "Failed to extract response from OpenAI".to_string())
+}
+
+/// Calls the Anthropic Messages API for classification.
+async fn call_anthropic_classification(
+    api_key: &str,
+    model: &str,
+    system_prompt: &str,
+    user_message: &str,
+) -> Result<String, String> {
+    let body = serde_json::json!({
+        "model": model,
+        "system": system_prompt,
+        "messages": [{"role": "user", "content": user_message}],
+        "max_tokens": 10,
+        "temperature": 0.0
+    });
+
+    let response = http_client()
+        .post("https://api.anthropic.com/v1/messages")
+        .header("x-api-key", api_key)
+        .header("anthropic-version", "2023-06-01")
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| sanitize_error(&format!("HTTP request failed: {}", e), api_key))?;
+
+    let status = response.status();
+    let json: Value = response
+        .json()
+        .await
+        .map_err(|e| sanitize_error(&format!("Failed to parse response: {}", e), api_key))?;
+
+    if !status.is_success() {
+        let error_msg = json["error"]["message"]
+            .as_str()
+            .unwrap_or("Unknown API error");
+        return Err(sanitize_error(
+            &format!("Anthropic API error ({}): {}", status, error_msg),
+            api_key,
+        ));
+    }
+
+    json["content"][0]["text"]
+        .as_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| "Failed to extract response from Anthropic".to_string())
+}
+
+/// Calls the Google Gemini API for classification.
+async fn call_google_classification(
+    api_key: &str,
+    model: &str,
+    system_prompt: &str,
+    user_message: &str,
+) -> Result<String, String> {
+    validate_model_for_url(model)?;
+    let encoded_model = url_encode(model);
+    let url = format!(
+        "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}",
+        encoded_model, api_key
+    );
+
+    let body = serde_json::json!({
+        "systemInstruction": {"parts": [{"text": system_prompt}]},
+        "contents": [{"parts": [{"text": user_message}]}],
+        "generationConfig": {"temperature": 0.0, "maxOutputTokens": 10}
+    });
+
+    let response = http_client()
+        .post(&url)
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| sanitize_error(&format!("HTTP request failed: {}", e), api_key))?;
+
+    let status = response.status();
+    let json: Value = response
+        .json()
+        .await
+        .map_err(|e| sanitize_error(&format!("Failed to parse response: {}", e), api_key))?;
+
+    if !status.is_success() {
+        let error_msg = json["error"]["message"]
+            .as_str()
+            .unwrap_or("Unknown API error");
+        return Err(sanitize_error(
+            &format!("Google API error ({}): {}", status, error_msg),
+            api_key,
+        ));
+    }
+
+    json["candidates"][0]["content"]["parts"][0]["text"]
+        .as_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| "Failed to extract response from Google".to_string())
+}
+
+/// Calls the Azure OpenAI API for classification.
+async fn call_azure_classification(
+    api_key: &str,
+    model: &str,
+    endpoint: Option<&str>,
+    system_prompt: &str,
+    user_message: &str,
+) -> Result<String, String> {
+    let endpoint = endpoint.ok_or("Azure endpoint is required. Open Settings to configure it.")?;
+
+    if !endpoint.starts_with("https://") {
+        return Err("Azure endpoint must use HTTPS.".to_string());
+    }
+
+    if endpoint.contains('?') || endpoint.contains('#') {
+        return Err("Azure endpoint must not contain query parameters or fragments".to_string());
+    }
+
+    validate_model_for_url(model)?;
+    let encoded_model = url_encode(model);
+    let url = format!(
+        "{}/openai/deployments/{}/chat/completions?api-version=2024-02-01",
+        endpoint.trim_end_matches('/'),
+        encoded_model
+    );
+
+    let body = serde_json::json!({
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_message}
+        ],
+        "temperature": 0.0,
+        "max_tokens": 10
+    });
+
+    let response = http_client()
+        .post(&url)
+        .header("api-key", api_key)
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| sanitize_error(&format!("HTTP request failed: {}", e), api_key))?;
+
+    let status = response.status();
+    let json: Value = response
+        .json()
+        .await
+        .map_err(|e| sanitize_error(&format!("Failed to parse response: {}", e), api_key))?;
+
+    if !status.is_success() {
+        let error_msg = json["error"]["message"]
+            .as_str()
+            .unwrap_or("Unknown API error");
+        return Err(sanitize_error(
+            &format!("Azure API error ({}): {}", status, error_msg),
+            api_key,
+        ));
+    }
+
+    json["choices"][0]["message"]["content"]
+        .as_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| "Failed to extract response from Azure".to_string())
+}
+
 /// Translates a natural language prompt into a shell command using the configured LLM provider.
 pub async fn translate_command(
     settings: &AppSettings,
@@ -568,5 +871,80 @@ mod tests {
             "Should reject endpoint with fragment, got: {}",
             err
         );
+    }
+
+    // --- Intent classification tests ---
+
+    #[test]
+    fn test_classify_intent_system_prompt_contains_shell_type() {
+        let prompt = build_classification_prompt("powershell", &["git".to_string(), "docker".to_string()]);
+        assert!(
+            prompt.contains("powershell"),
+            "Classification prompt should contain shell type"
+        );
+    }
+
+    #[test]
+    fn test_classify_intent_response_parsing_cli() {
+        let result = parse_classification_response("cli");
+        assert_eq!(result, "cli");
+    }
+
+    #[test]
+    fn test_classify_intent_response_parsing_nl() {
+        let result = parse_classification_response("natural_language");
+        assert_eq!(result, "natural_language");
+    }
+
+    #[test]
+    fn test_classify_intent_response_parsing_with_whitespace() {
+        let result = parse_classification_response(" cli \n");
+        assert_eq!(result, "cli");
+    }
+
+    #[test]
+    fn test_classify_intent_response_invalid_defaults_to_cli() {
+        let result = parse_classification_response("maybe");
+        assert_eq!(result, "cli", "Invalid response should default to 'cli'");
+    }
+
+    #[tokio::test]
+    async fn test_classify_intent_fails_without_api_key() {
+        let settings = AppSettings {
+            llm_provider: "openai".to_string(),
+            api_key: String::new(),
+            model: "gpt-4o-mini".to_string(),
+            azure_endpoint: None,
+        };
+        let request = ClassificationRequest {
+            input: "something ambiguous".to_string(),
+            shell_type: "powershell".to_string(),
+            known_commands: vec!["git".to_string()],
+        };
+        let result = classify_intent(&settings, &request).await;
+        assert!(result.is_err());
+        assert!(
+            result.unwrap_err().contains("No API key"),
+            "Error should mention missing API key"
+        );
+    }
+
+    #[test]
+    fn test_classification_prompt_contains_known_commands() {
+        let commands = vec!["git".to_string(), "docker".to_string(), "npm".to_string()];
+        let prompt = build_classification_prompt("powershell", &commands);
+        assert!(prompt.contains("git"), "Prompt should contain known commands");
+        assert!(prompt.contains("docker"), "Prompt should contain known commands");
+        assert!(prompt.contains("npm"), "Prompt should contain known commands");
+    }
+
+    #[test]
+    fn test_classification_prompt_limits_to_10_commands() {
+        let commands: Vec<String> = (0..20).map(|i| format!("cmd{}", i)).collect();
+        let prompt = build_classification_prompt("powershell", &commands);
+        // Should contain cmd0 through cmd9 but not cmd10+
+        assert!(prompt.contains("cmd0"), "Prompt should contain first commands");
+        assert!(prompt.contains("cmd9"), "Prompt should contain up to 10th command");
+        assert!(!prompt.contains("cmd10"), "Prompt should not contain 11th+ commands");
     }
 }

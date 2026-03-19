@@ -149,6 +149,25 @@ pub async fn translate_command(
     Ok(response.command)
 }
 
+#[tauri::command]
+pub async fn classify_intent_llm(
+    input: String,
+    shell_type: String,
+) -> Result<String, String> {
+    let settings = settings::load_settings()?;
+    let request = llm::ClassificationRequest {
+        input,
+        shell_type,
+        known_commands: Vec::new(), // Kept lightweight; the LLM prompt has its own examples
+    };
+    let response = llm::classify_intent(&settings, &request).await?;
+    // Validate: only accept exact "cli" or "natural_language"
+    match response.intent.as_str() {
+        "cli" | "natural_language" => Ok(response.intent),
+        _ => Ok("cli".to_string()), // Default to CLI if unexpected
+    }
+}
+
 /// Collect known commands (PATH scan + builtins). Extracted for reuse by completions.
 fn collect_known_commands() -> Vec<String> {
     let mut commands = Vec::new();

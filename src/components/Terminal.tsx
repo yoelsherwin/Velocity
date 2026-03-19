@@ -4,7 +4,7 @@ import { createSession, writeToSession, closeSession, startReading } from '../li
 import { SHELL_TYPES, ShellType, Block } from '../lib/types';
 import { extractExitCode, getExitCodeMarker } from '../lib/exit-code-parser';
 import { classifyIntent, stripHashPrefix, ClassificationResult } from '../lib/intent-classifier';
-import { translateCommand } from '../lib/llm';
+import { translateCommand, classifyIntentLLM } from '../lib/llm';
 import { getCwd } from '../lib/cwd';
 import { stripAnsi } from '../lib/ansi';
 import { encodeKey } from '../lib/key-encoder';
@@ -59,6 +59,7 @@ function Terminal({ paneId }: TerminalProps) {
   const [gridRows, setGridRows] = useState<GridRow[]>([]);
   const [agentLoading, setAgentLoading] = useState(false);
   const [agentError, setAgentError] = useState<string | null>(null);
+  const [loadingLabel, setLoadingLabel] = useState<string>('Translating...');
   const translationIdRef = useRef(0);
   const outputRef = useRef<HTMLDivElement>(null);
   const unlistenRefs = useRef<(() => void)[]>([]);
@@ -441,8 +442,30 @@ function Terminal({ paneId }: TerminalProps) {
         return;
       }
 
+      let resolvedIntent = inputMode.intent;
+
+      // LLM fallback for ambiguous classification (only on submit, not keystroke)
+      if (inputMode.confidence === 'low') {
+        try {
+          const thisTranslation = ++translationIdRef.current;
+          setAgentLoading(true);
+          setLoadingLabel('Classifying...');
+          setAgentError(null);
+          resolvedIntent = await classifyIntentLLM(trimmed, shellType);
+          // Discard stale result if user switched shells or reset while in-flight
+          if (translationIdRef.current !== thisTranslation) return;
+          // Update the mode indicator to show the resolved intent
+          setInputMode({ intent: resolvedIntent, confidence: 'high' });
+        } catch {
+          // LLM unavailable — use heuristic result
+          resolvedIntent = inputMode.intent;
+        } finally {
+          setAgentLoading(false);
+        }
+      }
+
       // Use inputMode.intent to determine routing (replaces hardcoded hasHashPrefix check)
-      if (inputMode.intent === 'natural_language') {
+      if (resolvedIntent === 'natural_language') {
         // Agent mode: translate via LLM
         // Strip # prefix if present (backward compatible)
         const nlInput = trimmed.startsWith('#') ? stripHashPrefix(trimmed) : trimmed;
@@ -452,6 +475,7 @@ function Terminal({ paneId }: TerminalProps) {
         }
         const thisTranslation = ++translationIdRef.current;
         setAgentLoading(true);
+        setLoadingLabel('Translating...');
         setAgentError(null);
         try {
           const cwd = await getCwd().catch(() => 'C:\\');
@@ -785,7 +809,7 @@ function Terminal({ paneId }: TerminalProps) {
           {agentLoading && (
             <div className="agent-loading" data-testid="agent-loading">
               <span className="agent-spinner">&#x27F3;</span>
-              Translating...
+              {loadingLabel}
             </div>
           )}
           <InputEditor

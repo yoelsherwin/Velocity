@@ -24,9 +24,11 @@ vi.mock('@tauri-apps/api/event', () => ({
 }));
 
 const mockTranslateCommand = vi.fn();
+const mockClassifyIntentLLM = vi.fn();
 
 vi.mock('../lib/llm', () => ({
   translateCommand: (...args: unknown[]) => mockTranslateCommand(...args),
+  classifyIntentLLM: (...args: unknown[]) => mockClassifyIntentLLM(...args),
 }));
 
 const mockGetCwd = vi.fn();
@@ -60,6 +62,7 @@ describe('Terminal Component', () => {
     mockCloseSession.mockResolvedValue(undefined);
     mockStartReading.mockResolvedValue(undefined);
     mockTranslateCommand.mockResolvedValue('dir');
+    mockClassifyIntentLLM.mockResolvedValue('cli');
     mockGetCwd.mockResolvedValue('C:\\Users\\test');
     // Mock get_known_commands to return a set of known commands
     mockInvoke.mockImplementation((cmd: string) => {
@@ -1238,6 +1241,229 @@ describe('Terminal Component', () => {
   });
 
   // --- Task 022: Tab completion integration tests ---
+
+  // --- Task 025: LLM intent fallback tests ---
+
+  it('test_submit_low_confidence_calls_llm_classify', async () => {
+    // "foobar bazqux" is an unknown 3+ word input -> NL low confidence
+    // But we want to test with a 1-2 word unknown -> CLI low confidence
+    mockClassifyIntentLLM.mockResolvedValue('cli');
+
+    render(<Terminal />);
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    // Wait for known commands to load
+    await waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith('get_known_commands');
+    });
+
+    const textarea = screen.getByTestId('editor-textarea');
+    // "foobar" is unknown and 1 word -> cli, low confidence
+    fireEvent.change(textarea, { target: { value: 'foobar' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(mockClassifyIntentLLM).toHaveBeenCalledWith('foobar', 'powershell');
+    });
+  });
+
+  it('test_submit_high_confidence_skips_llm', async () => {
+    render(<Terminal />);
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    // Wait for known commands to load
+    await waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith('get_known_commands');
+    });
+
+    const textarea = screen.getByTestId('editor-textarea');
+    // "dir" is a known command -> CLI, high confidence
+    fireEvent.change(textarea, { target: { value: 'dir' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(mockWriteToSession).toHaveBeenCalled();
+    });
+
+    // classifyIntentLLM should NOT have been called
+    expect(mockClassifyIntentLLM).not.toHaveBeenCalled();
+  });
+
+  it('test_submit_llm_classify_failure_uses_heuristic', async () => {
+    mockClassifyIntentLLM.mockRejectedValue('No API key configured.');
+
+    render(<Terminal />);
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    await waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith('get_known_commands');
+    });
+
+    const textarea = screen.getByTestId('editor-textarea');
+    // "foobar" -> cli, low confidence (heuristic)
+    fireEvent.change(textarea, { target: { value: 'foobar' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    // LLM call fails, should fall back to heuristic (cli) and execute
+    await waitFor(() => {
+      expect(mockWriteToSession).toHaveBeenCalledWith(
+        'test-session-id',
+        expect.stringContaining('foobar'),
+      );
+    });
+  });
+
+  it('test_submit_llm_classify_returns_cli_executes', async () => {
+    mockClassifyIntentLLM.mockResolvedValue('cli');
+
+    render(<Terminal />);
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    await waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith('get_known_commands');
+    });
+
+    const textarea = screen.getByTestId('editor-textarea');
+    // "foobar" -> cli, low confidence
+    fireEvent.change(textarea, { target: { value: 'foobar' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    // LLM returns cli -> execute directly
+    await waitFor(() => {
+      expect(mockWriteToSession).toHaveBeenCalledWith(
+        'test-session-id',
+        expect.stringContaining('foobar'),
+      );
+    });
+
+    // translateCommand should NOT have been called
+    expect(mockTranslateCommand).not.toHaveBeenCalled();
+  });
+
+  it('test_submit_llm_classify_returns_nl_translates', async () => {
+    mockClassifyIntentLLM.mockResolvedValue('natural_language');
+    mockTranslateCommand.mockResolvedValue('Get-Process');
+
+    render(<Terminal />);
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    await waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith('get_known_commands');
+    });
+
+    const textarea = screen.getByTestId('editor-textarea');
+    // "foobar" -> cli, low confidence; LLM overrides to natural_language
+    fireEvent.change(textarea, { target: { value: 'foobar' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    // LLM returns natural_language -> should trigger translation
+    await waitFor(() => {
+      expect(mockTranslateCommand).toHaveBeenCalled();
+    });
+
+    // Translated command should appear in editor
+    await waitFor(() => {
+      const ta = screen.getByTestId('editor-textarea') as HTMLTextAreaElement;
+      expect(ta.value).toBe('Get-Process');
+    });
+
+    // Should NOT have been auto-executed
+    expect(mockWriteToSession).not.toHaveBeenCalled();
+  });
+
+  it('test_classifying_loading_label_shown', async () => {
+    // Keep classifyIntentLLM pending
+    let resolveClassify!: (value: string) => void;
+    mockClassifyIntentLLM.mockReturnValue(
+      new Promise<string>((resolve) => {
+        resolveClassify = resolve;
+      }),
+    );
+
+    render(<Terminal />);
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    await waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith('get_known_commands');
+    });
+
+    const textarea = screen.getByTestId('editor-textarea');
+    // "foobar" -> cli, low confidence
+    fireEvent.change(textarea, { target: { value: 'foobar' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    // Loading should show "Classifying..."
+    await waitFor(() => {
+      const loading = screen.getByTestId('agent-loading');
+      expect(loading).toBeInTheDocument();
+      expect(loading.textContent).toContain('Classifying...');
+    });
+
+    // Resolve to CLI
+    await act(async () => {
+      resolveClassify('cli');
+    });
+
+    // Loading should disappear
+    await waitFor(() => {
+      expect(screen.queryByTestId('agent-loading')).not.toBeInTheDocument();
+    });
+  });
+
+  it('test_translating_loading_label_shown', async () => {
+    // Classify resolves immediately to NL, translation stays pending
+    mockClassifyIntentLLM.mockResolvedValue('natural_language');
+
+    let resolveTranslate!: (value: string) => void;
+    mockTranslateCommand.mockReturnValue(
+      new Promise<string>((resolve) => {
+        resolveTranslate = resolve;
+      }),
+    );
+
+    render(<Terminal />);
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    await waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith('get_known_commands');
+    });
+
+    const textarea = screen.getByTestId('editor-textarea');
+    // "foobar" -> cli, low confidence; LLM overrides to NL
+    fireEvent.change(textarea, { target: { value: 'foobar' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    // Should show "Translating..." during the translation phase
+    await waitFor(() => {
+      const loading = screen.getByTestId('agent-loading');
+      expect(loading).toBeInTheDocument();
+      expect(loading.textContent).toContain('Translating...');
+    });
+
+    // Resolve translation
+    await act(async () => {
+      resolveTranslate('Get-Process');
+    });
+
+    // Loading should disappear
+    await waitFor(() => {
+      expect(screen.queryByTestId('agent-loading')).not.toBeInTheDocument();
+    });
+  });
 
   it('test_tab_completion_shows_ghost_text', async () => {
     // Mock get_completions to return command completions
