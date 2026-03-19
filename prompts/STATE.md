@@ -10,7 +10,7 @@
 
 | # | Feature | Status |
 |---|---------|--------|
-| P0-1 | Full terminal emulation (xterm/VT100) | Not started |
+| P0-1 | Full terminal emulation (xterm/VT100) | **DONE** Phase 1: `c4c67cb`+`51fc742`, Phase 2: `bca5fbb`+`7edf8a3` |
 | P0-2 | Tab/path completions | **DONE** (`e57b639` + `dde12a2`) |
 | P0-3 | Find in terminal output (Ctrl+Shift+F) | **DONE** (`3848a3a` + `7251e29`) |
 | P0-4 | Command palette (Ctrl+Shift+P) | **DONE** (`23e812a` + `9592e1c`) |
@@ -19,10 +19,10 @@
 | P0-7 | CLI/AI mode indicator | **DONE** (`04461db`) |
 | P0-8a | Intent classifier heuristic engine | **DONE** (`04461db`) |
 | P0-8b | Known-command enumeration (Rust) | **DONE** (`04461db`) |
-| P0-8c | LLM fallback for ambiguous inputs | Deferred |
+| P0-8c | LLM fallback for ambiguous inputs | **DONE** (`9a5fd58`) |
 | P0-BUG | BUG-004 + BUG-025 | **FIXED** in P0-5 |
 
-**Remaining: P0-1** (1 item)
+**Phase 1 COMPLETE — all P0 items done (including P0-8c).**
 
 ## In Progress
 None.
@@ -44,6 +44,8 @@ None.
 - QA-022 BUG-001: Tab completion debounce makes first Tab appear unresponsive
 - QA-022 BUG-002: handleTab bypasses handleInputChange (skips draft/classifier update)
 - QA-022 BUG-007: CWD for completions is Tauri process CWD, not shell CWD after cd
+- QA-024 BUG-001: Grid throttling can drop the final update before alt screen exit
+- SEC-025-01: Default-to-CLI on LLM failure inverts safe default (should default to NL preview)
 
 ### Low
 - BUG-010, 028, 029, 031, 032, 035, 038, 040, 041
@@ -55,6 +57,10 @@ None.
 - QA-022 BUG-003: Case-insensitive ghost text looks odd with mixed-case partials
 - QA-022 BUG-004: Completions reset on any cursor move, even within same token
 - QA-022 BUG-006: PATH scan strips extensions via first-dot split
+- QA-024 BUG-002: Key encoder missing Shift+Tab (backtab) sequence
+- QA-024 BUG-003: Alt screen enter swallows normal-mode output from same chunk
+- QA-025 BUG-001: Loading flicker between classification and translation
+- QA-025 BUG-002: Empty known_commands in LLM classification prompt
 
 ### Accepted Risk
 - SEC-002-H1: Full parent env inherited by shells
@@ -66,11 +72,11 @@ None.
 
 | Layer | Count |
 |-------|-------|
-| Vitest (frontend) | 313 |
-| cargo test (Rust unit) | 77 (+1 ignored) |
-| Rust integration | 10 |
-| Playwright E2E | 26 |
-| **Total** | **~426** |
+| Vitest (frontend) | 359 |
+| cargo test (Rust unit) | 105 (+1 ignored) |
+| Rust integration | 11 |
+| Playwright E2E | 27 |
+| **Total** | **~502** |
 
 ## Remaining Phase 1 Roadmap
 
