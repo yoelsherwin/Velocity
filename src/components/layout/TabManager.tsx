@@ -5,6 +5,8 @@ import TabBar from './TabBar';
 import PaneContainer from './PaneContainer';
 import SettingsModal from '../SettingsModal';
 import CommandPalette from '../CommandPalette';
+import { getSettings } from '../../lib/settings';
+import { applyFontSettings } from '../../lib/font-settings';
 
 const MAX_PANES_TOTAL = 20;
 
@@ -49,6 +51,15 @@ function TabManager() {
   useEffect(() => {
     focusedPaneIdRef.current = focusedPaneId;
   }, [focusedPaneId]);
+
+  // Load font settings on startup and apply them to CSS custom properties
+  useEffect(() => {
+    getSettings()
+      .then((settings) => applyFontSettings(settings))
+      .catch(() => {
+        // Ignore errors — CSS defaults remain in effect
+      });
+  }, []);
 
   // Keep tabsRef in sync with tabs state
   useEffect(() => {

@@ -169,4 +169,87 @@ describe('SettingsModal', () => {
     const modelSelect = screen.getByTestId('settings-model') as HTMLSelectElement;
     expect(modelSelect.value).toBe('gemini-2.0-flash');
   });
+
+  it('test_settings_modal_renders_font_section', async () => {
+    render(<SettingsModal onClose={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('settings-modal')).toBeInTheDocument();
+    });
+
+    // Appearance section should be visible
+    expect(screen.getByText('Appearance')).toBeInTheDocument();
+    expect(screen.getByTestId('settings-font-family')).toBeInTheDocument();
+    expect(screen.getByTestId('settings-font-size')).toBeInTheDocument();
+    expect(screen.getByTestId('settings-line-height')).toBeInTheDocument();
+    // Font preview should be visible
+    expect(screen.getByTestId('font-preview')).toBeInTheDocument();
+  });
+
+  it('test_settings_modal_saves_font_settings', async () => {
+    render(<SettingsModal onClose={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('settings-modal')).toBeInTheDocument();
+    });
+
+    // Fill in font fields
+    const fontFamilyInput = screen.getByTestId('settings-font-family') as HTMLInputElement;
+    fireEvent.change(fontFamilyInput, { target: { value: 'Fira Code, monospace' } });
+
+    const fontSizeInput = screen.getByTestId('settings-font-size') as HTMLInputElement;
+    fireEvent.change(fontSizeInput, { target: { value: '16' } });
+
+    const lineHeightInput = screen.getByTestId('settings-line-height') as HTMLInputElement;
+    fireEvent.change(lineHeightInput, { target: { value: '1.6' } });
+
+    // Click Save
+    fireEvent.click(screen.getByTestId('settings-save-btn'));
+
+    await waitFor(() => {
+      expect(mockSaveSettings).toHaveBeenCalledTimes(1);
+      const savedSettings = mockSaveSettings.mock.calls[0][0];
+      expect(savedSettings.font_family).toBe('Fira Code, monospace');
+      expect(savedSettings.font_size).toBe(16);
+      expect(savedSettings.line_height).toBe(1.6);
+    });
+  });
+
+  it('test_font_preview_updates_on_input', async () => {
+    render(<SettingsModal onClose={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('settings-modal')).toBeInTheDocument();
+    });
+
+    const fontFamilyInput = screen.getByTestId('settings-font-family') as HTMLInputElement;
+    fireEvent.change(fontFamilyInput, { target: { value: 'Courier New' } });
+
+    const preview = screen.getByTestId('font-preview') as HTMLElement;
+    expect(preview.style.fontFamily).toContain('Courier New');
+  });
+
+  it('test_settings_modal_loads_font_settings', async () => {
+    mockGetSettings.mockResolvedValue({
+      llm_provider: 'openai',
+      api_key: '',
+      model: 'gpt-4o-mini',
+      font_family: 'JetBrains Mono',
+      font_size: 18,
+      line_height: 1.8,
+    });
+
+    render(<SettingsModal onClose={vi.fn()} />);
+
+    await waitFor(() => {
+      const fontFamilyInput = screen.getByTestId('settings-font-family') as HTMLInputElement;
+      expect(fontFamilyInput.value).toBe('JetBrains Mono');
+    });
+
+    const fontSizeInput = screen.getByTestId('settings-font-size') as HTMLInputElement;
+    expect(fontSizeInput.value).toBe('18');
+
+    const lineHeightInput = screen.getByTestId('settings-line-height') as HTMLInputElement;
+    expect(lineHeightInput.value).toBe('1.8');
+  });
 });

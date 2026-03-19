@@ -87,7 +87,12 @@ export function estimateBlockHeight(output: string): number {
   for (let i = 0; i < output.length && lines < 50; i++) {
     if (output[i] === '\n') lines++;
   }
-  const lineHeight = 19.6; // 14px font * 1.4 line-height
+  // Read font metrics from CSS custom properties, falling back to defaults
+  const root = document.documentElement;
+  const rootStyles = getComputedStyle(root);
+  const fontSize = parseFloat(rootStyles.getPropertyValue('--terminal-font-size')) || 14;
+  const lineHeightRatio = parseFloat(rootStyles.getPropertyValue('--terminal-line-height')) || 1.4;
+  const lineHeight = fontSize * lineHeightRatio;
   const headerHeight = 32;
   return headerHeight + lines * lineHeight;
 }

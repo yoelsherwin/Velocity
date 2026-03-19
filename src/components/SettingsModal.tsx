@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { AppSettings, LLM_PROVIDERS, LlmProviderId } from '../lib/types';
 import { getSettings, saveSettings } from '../lib/settings';
+import { applyFontSettings } from '../lib/font-settings';
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -12,6 +13,9 @@ function SettingsModal({ onClose }: SettingsModalProps) {
   const [model, setModel] = useState('gpt-4o-mini');
   const [azureEndpoint, setAzureEndpoint] = useState('');
   const [showApiKey, setShowApiKey] = useState(false);
+  const [fontFamily, setFontFamily] = useState('');
+  const [fontSize, setFontSize] = useState<string>('');
+  const [lineHeight, setLineHeight] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,6 +30,9 @@ function SettingsModal({ onClose }: SettingsModalProps) {
         setApiKey(settings.api_key);
         setModel(settings.model);
         setAzureEndpoint(settings.azure_endpoint ?? '');
+        setFontFamily(settings.font_family ?? '');
+        setFontSize(settings.font_size != null ? String(settings.font_size) : '');
+        setLineHeight(settings.line_height != null ? String(settings.line_height) : '');
         setLoading(false);
       })
       .catch((err) => {
@@ -51,14 +58,20 @@ function SettingsModal({ onClose }: SettingsModalProps) {
   const handleSave = async () => {
     setSaving(true);
     setError(null);
+    const parsedFontSize = fontSize ? Number(fontSize) : undefined;
+    const parsedLineHeight = lineHeight ? Number(lineHeight) : undefined;
     const settings: AppSettings = {
       llm_provider: provider,
       api_key: apiKey,
       model,
       azure_endpoint: provider === 'azure' ? azureEndpoint || undefined : undefined,
+      font_family: fontFamily || undefined,
+      font_size: parsedFontSize && !isNaN(parsedFontSize) ? parsedFontSize : undefined,
+      line_height: parsedLineHeight && !isNaN(parsedLineHeight) ? parsedLineHeight : undefined,
     };
     try {
       await saveSettings(settings);
+      applyFontSettings(settings);
       onClose();
     } catch (err) {
       setError(String(err));
@@ -93,6 +106,75 @@ function SettingsModal({ onClose }: SettingsModalProps) {
             }}
           >
             {error && <div className="settings-error">{error}</div>}
+
+            {/* Appearance */}
+            <h3 style={{ color: '#cdd6f4', fontSize: '15px', fontWeight: 600, margin: '4px 0 0 0' }}>
+              Appearance
+            </h3>
+
+            <label className="settings-label" htmlFor="settings-font-family">
+              Font Family
+            </label>
+            <input
+              id="settings-font-family"
+              data-testid="settings-font-family"
+              className="settings-input"
+              type="text"
+              value={fontFamily}
+              onChange={(e) => setFontFamily(e.target.value)}
+              placeholder="'Cascadia Code', 'Consolas', 'Courier New', monospace"
+            />
+
+            <label className="settings-label" htmlFor="settings-font-size">
+              Font Size (px)
+            </label>
+            <input
+              id="settings-font-size"
+              data-testid="settings-font-size"
+              className="settings-input"
+              type="number"
+              min={8}
+              max={32}
+              step={1}
+              value={fontSize}
+              onChange={(e) => setFontSize(e.target.value)}
+              placeholder="14"
+            />
+
+            <label className="settings-label" htmlFor="settings-line-height">
+              Line Height
+            </label>
+            <input
+              id="settings-line-height"
+              data-testid="settings-line-height"
+              className="settings-input"
+              type="number"
+              min={1.0}
+              max={3.0}
+              step={0.1}
+              value={lineHeight}
+              onChange={(e) => setLineHeight(e.target.value)}
+              placeholder="1.4"
+            />
+
+            {/* Font Preview */}
+            <div
+              data-testid="font-preview"
+              style={{
+                fontFamily: fontFamily || "'Cascadia Code', 'Consolas', 'Courier New', monospace",
+                fontSize: fontSize ? `${fontSize}px` : '14px',
+                lineHeight: lineHeight || '1.4',
+                padding: '8px 12px',
+                backgroundColor: '#313244',
+                borderRadius: '4px',
+                color: '#cdd6f4',
+                whiteSpace: 'pre',
+              }}
+            >
+              {'$ echo "Hello, World!"'}
+            </div>
+
+            <div style={{ borderBottom: '1px solid #313244', margin: '4px 0' }} />
 
             {/* Provider */}
             <label className="settings-label" htmlFor="settings-provider">

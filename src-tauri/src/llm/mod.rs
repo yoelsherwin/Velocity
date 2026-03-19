@@ -727,6 +727,7 @@ mod tests {
             api_key: String::new(),
             model: "gpt-4o-mini".to_string(),
             azure_endpoint: None,
+            ..Default::default()
         };
         let request = TranslationRequest {
             prompt: "list files".to_string(),
@@ -748,6 +749,7 @@ mod tests {
             api_key: "some-key".to_string(),
             model: "some-model".to_string(),
             azure_endpoint: None,
+            ..Default::default()
         };
         let request = TranslationRequest {
             prompt: "list files".to_string(),
@@ -834,6 +836,7 @@ mod tests {
             api_key: "some-key".to_string(),
             model: "gpt-4o-mini".to_string(),
             azure_endpoint: Some("https://my-instance.openai.azure.com?foo=bar".to_string()),
+            ..Default::default()
         };
         let request = TranslationRequest {
             prompt: "list files".to_string(),
@@ -857,6 +860,7 @@ mod tests {
             api_key: "some-key".to_string(),
             model: "gpt-4o-mini".to_string(),
             azure_endpoint: Some("https://my-instance.openai.azure.com#frag".to_string()),
+            ..Default::default()
         };
         let request = TranslationRequest {
             prompt: "list files".to_string(),
@@ -915,6 +919,7 @@ mod tests {
             api_key: String::new(),
             model: "gpt-4o-mini".to_string(),
             azure_endpoint: None,
+            ..Default::default()
         };
         let request = ClassificationRequest {
             input: "something ambiguous".to_string(),

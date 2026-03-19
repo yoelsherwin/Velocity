@@ -37,6 +37,9 @@ export interface AppSettings {
   api_key: string;
   model: string;
   azure_endpoint?: string;
+  font_family?: string;
+  font_size?: number;
+  line_height?: number;
 }
 
 export const LLM_PROVIDERS = [
