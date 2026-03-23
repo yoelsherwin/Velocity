@@ -44,6 +44,14 @@ None.
 | P1-U8 | Per-tab auto-titles | **DONE** (`a8b8c70`) |
 | P1-W3 | Secret redaction | **DONE** (`a481e2b`) |
 | P1-W1 | Session restoration | **DONE** (`454d392` + `278eb12`) |
+| P1-R1 | Text decorations (strikethrough) | **DONE** (`8b21271`) |
+| P1-R4 | Cursor in alt screen | **DONE** (`ba3149e`) |
+| P1-B2 | Block selection (click) | **DONE** (`e94090e`) |
+| P1-B4 | Block output filtering | **DONE** (`44e77fc`) |
+| P1-I1 | Rich history | **DONE** (`deb399a`) |
+| P1-I3 | Command corrections | **DONE** (`157104a`) |
+| P1-I4 | IDE-like cursor | **DONE** (`7d1a571`) |
+| P1-W2 | Multiple windows | **DONE** (`b593501`) |
 
 ## Outstanding Issues
 
@@ -98,11 +106,11 @@ None.
 
 | Layer | Count |
 |-------|-------|
-| Vitest (frontend) | 531 |
-| cargo test (Rust unit) | 138 (+1 ignored) |
+| Vitest (frontend) | 551 |
+| cargo test (Rust unit) | 143 (+1 ignored) |
 | Rust integration | 11 |
 | Playwright E2E | 28 |
-| **Total** | **~708** |
+| **Total** | **~733** |
 
 ## Remaining Phase 1 Roadmap
 
