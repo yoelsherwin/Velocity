@@ -437,14 +437,25 @@ function Terminal({ paneId }: TerminalProps) {
           : withNew;
       });
       activeBlockIdRef.current = newBlock.id;
-      // Auto-expand the new running block if it was somehow collapsed
+      // Auto-expand the new running block if it was somehow collapsed,
+      // and prune IDs of blocks that were evicted by MAX_BLOCKS
       setCollapsedBlocks((prev) => {
-        if (prev.has(newBlock.id)) {
-          const next = new Set(prev);
-          next.delete(newBlock.id);
-          return next;
+        const currentBlockIds = new Set(blocksRef.current.map((b) => b.id));
+        let changed = false;
+        const next = new Set(prev);
+        // Prune evicted block IDs
+        for (const id of next) {
+          if (!currentBlockIds.has(id)) {
+            next.delete(id);
+            changed = true;
+          }
         }
-        return prev;
+        // Auto-expand new running block
+        if (next.has(newBlock.id)) {
+          next.delete(newBlock.id);
+          changed = true;
+        }
+        return changed ? next : prev;
       });
       // Skip the exit-code marker for commands that kill the shell (e.g. "exit").
       // The marker suffix would never execute and its echoed text clutters the output.
@@ -660,6 +671,9 @@ function Terminal({ paneId }: TerminalProps) {
     const handleBlockNav = (e: KeyboardEvent) => {
       // Enter/Space toggles collapse when a block is focused
       if ((e.key === 'Enter' || e.key === ' ') && focusedBlockIndex >= 0) {
+        // Don't intercept keys when the user is typing in an input or textarea
+        const tag = (e.target as HTMLElement)?.tagName;
+        if (tag === 'TEXTAREA' || tag === 'INPUT') return;
         const block = blocksRef.current[focusedBlockIndex];
         if (block && block.command !== '') {
           e.preventDefault();
@@ -862,6 +876,19 @@ function Terminal({ paneId }: TerminalProps) {
     document.addEventListener('velocity:command', handleCommand);
     return () => document.removeEventListener('velocity:command', handleCommand);
   }, [paneId, handleShellSwitch, handleRestart, handleToggleMode, search.isOpen, search.open, historySearchOpen, input, collapseAllBlocks, expandAllBlocks, toggleBlockCollapse, focusedBlockIndex]);
+
+  // Auto-expand collapsed block when search navigates to a match inside it
+  useEffect(() => {
+    if (search.currentMatchIndex < 0 || search.matches.length === 0) return;
+    const match = search.matches[search.currentMatchIndex];
+    if (match && collapsedBlocks.has(match.blockId)) {
+      setCollapsedBlocks((prev) => {
+        const next = new Set(prev);
+        next.delete(match.blockId);
+        return next;
+      });
+    }
+  }, [search.currentMatchIndex, search.matches, collapsedBlocks]);
 
   // Scroll to current match when it changes
   useEffect(() => {
