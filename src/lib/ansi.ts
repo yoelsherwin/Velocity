@@ -7,6 +7,7 @@ export interface AnsiSpan {
   bold?: boolean;
   italic?: boolean;
   underline?: boolean;
+  strikethrough?: boolean;
   dim?: boolean;
 }
 
@@ -57,6 +58,9 @@ export function parseAnsi(text: string): AnsiSpan[] {
       }
       if (decorations.includes('dim')) {
         span.dim = true;
+      }
+      if (decorations.includes('strikethrough')) {
+        span.strikethrough = true;
       }
       return span;
     });
