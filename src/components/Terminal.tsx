@@ -15,6 +15,7 @@ import BlockView from './blocks/BlockView';
 import InputEditor from './editor/InputEditor';
 import TerminalGrid, { GridRow } from './TerminalGrid';
 import SearchBar from './SearchBar';
+import HistorySearch from './HistorySearch';
 import { useCommandHistory } from '../hooks/useCommandHistory';
 import { useCompletions } from '../hooks/useCompletions';
 import { useBlockVisibility } from '../hooks/useBlockVisibility';
@@ -80,6 +81,8 @@ function Terminal({ paneId }: TerminalProps) {
   const completions = useCompletions(input, cursorPos, history, knownCommands, cwd);
   const { visibleIds, observeBlock } = useBlockVisibility();
   const search = useSearch(blocks);
+  const [historySearchOpen, setHistorySearchOpen] = useState(false);
+  const savedInputRef = useRef('');
 
   // Warn on window close if any command is still running
   const hasRunningProcesses = useMemo(
@@ -675,6 +678,36 @@ function Terminal({ paneId }: TerminalProps) {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [search.isOpen, search.open]);
 
+  // Ctrl+R keyboard handler for history search
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey && (e.key === 'r' || e.key === 'R')) {
+        // If history search is already open, let the HistorySearch component handle Ctrl+R cycling
+        if (historySearchOpen) return;
+        e.preventDefault();
+        savedInputRef.current = input;
+        setHistorySearchOpen(true);
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [historySearchOpen, input]);
+
+  const handleHistorySearchAccept = useCallback((command: string) => {
+    setHistorySearchOpen(false);
+    setInput(command);
+    // Return focus to editor
+    editorRef.current?.focus();
+  }, []);
+
+  const handleHistorySearchCancel = useCallback(() => {
+    setHistorySearchOpen(false);
+    setInput(savedInputRef.current);
+    // Return focus to editor
+    editorRef.current?.focus();
+  }, []);
+
   // Ref for the editor textarea, used to return focus on search close
   const editorRef = useRef<HTMLTextAreaElement>(null);
 
@@ -755,6 +788,12 @@ function Terminal({ paneId }: TerminalProps) {
         case 'notifications.test':
           sendTestNotification().catch(() => {});
           break;
+        case 'history.search':
+          if (!historySearchOpen) {
+            savedInputRef.current = input;
+            setHistorySearchOpen(true);
+          }
+          break;
         default:
           break;
       }
@@ -762,7 +801,7 @@ function Terminal({ paneId }: TerminalProps) {
 
     document.addEventListener('velocity:command', handleCommand);
     return () => document.removeEventListener('velocity:command', handleCommand);
-  }, [paneId, handleShellSwitch, handleRestart, handleToggleMode, search.isOpen, search.open]);
+  }, [paneId, handleShellSwitch, handleRestart, handleToggleMode, search.isOpen, search.open, historySearchOpen, input]);
 
   // Scroll to current match when it changes
   useEffect(() => {
@@ -897,11 +936,17 @@ function Terminal({ paneId }: TerminalProps) {
               {loadingLabel}
             </div>
           )}
+          <HistorySearch
+            history={history}
+            isOpen={historySearchOpen}
+            onAccept={handleHistorySearchAccept}
+            onCancel={handleHistorySearchCancel}
+          />
           <InputEditor
             value={input}
             onChange={handleInputChange}
             onSubmit={handleSubmit}
-            disabled={closed || agentLoading}
+            disabled={closed || agentLoading || historySearchOpen}
             ghostText={completions.suggestion}
             onNavigateUp={handleNavigateUp}
             onNavigateDown={handleNavigateDown}

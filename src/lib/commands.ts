@@ -26,4 +26,5 @@ export const COMMANDS: Command[] = [
   { id: 'terminal.copyLastOutput', title: 'Copy Last Output', category: 'Terminal', keywords: ['clipboard'] },
   { id: 'palette.open', title: 'Command Palette', shortcut: 'Ctrl+Shift+P', category: 'General', keywords: ['commands', 'actions'] },
   { id: 'notifications.test', title: 'Test Notification', category: 'Terminal', keywords: ['notify', 'desktop', 'alert'] },
+  { id: 'history.search', title: 'Search History', shortcut: 'Ctrl+R', category: 'Navigation', keywords: ['reverse', 'history', 'find', 'command'] },
 ];
