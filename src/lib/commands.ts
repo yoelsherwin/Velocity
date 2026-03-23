@@ -7,6 +7,7 @@ export interface Command {
 }
 
 export const COMMANDS: Command[] = [
+  { id: 'window.new', title: 'New Window', shortcut: 'Ctrl+Shift+N', category: 'Window', keywords: ['create', 'open'] },
   { id: 'tab.new', title: 'New Tab', shortcut: 'Ctrl+T', category: 'Tab', keywords: ['create', 'add'] },
   { id: 'tab.close', title: 'Close Tab', shortcut: 'Ctrl+W', category: 'Tab', keywords: ['remove', 'delete'] },
   { id: 'pane.splitRight', title: 'Split Pane Right', shortcut: 'Ctrl+Shift+Right', category: 'Pane', keywords: ['horizontal', 'divide'] },

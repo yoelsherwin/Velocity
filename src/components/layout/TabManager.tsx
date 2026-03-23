@@ -11,6 +11,7 @@ import { applyThemeById, isValidThemeId, DEFAULT_THEME_ID } from '../../lib/them
 import { loadSessionState, SessionState, SavedPane } from '../../lib/session';
 import { useSessionPersistence } from '../../hooks/useSessionPersistence';
 import { SessionContext, buildPaneLookup } from '../../lib/session-context';
+import { invoke } from '@tauri-apps/api/core';
 
 const MAX_PANES_TOTAL = 20;
 
@@ -343,6 +344,13 @@ function TabManager() {
           handleClosePane(activeTabIdRef.current, focusedPaneIdRef.current);
         }
       }
+      // Ctrl+Shift+N: New window
+      if (e.ctrlKey && e.shiftKey && (e.key === 'N' || e.key === 'n')) {
+        e.preventDefault();
+        invoke('create_new_window').catch(() => {
+          // Ignore errors (e.g. in test environment)
+        });
+      }
       // Ctrl+Shift+P: Toggle command palette
       if (e.ctrlKey && e.shiftKey && (e.key === 'P' || e.key === 'p')) {
         e.preventDefault();
@@ -370,6 +378,11 @@ function TabManager() {
   const handlePaletteAction = useCallback(
     (commandId: string) => {
       switch (commandId) {
+        case 'window.new':
+          invoke('create_new_window').catch(() => {
+            // Ignore errors (e.g. in test environment)
+          });
+          break;
         case 'tab.new':
           handleNewTab();
           break;

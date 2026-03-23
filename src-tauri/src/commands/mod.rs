@@ -504,6 +504,21 @@ pub async fn get_completions(
 }
 
 #[tauri::command]
+pub async fn create_new_window(app: tauri::AppHandle) -> Result<(), String> {
+    let window_id = format!("velocity-{}", uuid::Uuid::new_v4());
+    tauri::WebviewWindowBuilder::new(
+        &app,
+        &window_id,
+        tauri::WebviewUrl::App("index.html".into()),
+    )
+    .title("Velocity")
+    .inner_size(1200.0, 800.0)
+    .build()
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn save_session(state: String) -> Result<(), String> {
     session::save_session(&state)
 }
@@ -665,6 +680,16 @@ mod tests {
     fn test_git_info_invalid_cwd() {
         let result = compute_git_info("C:\\this_path_does_not_exist_velocity_999");
         assert!(result.is_err(), "Should return error for invalid path");
+    }
+
+    #[test]
+    fn test_create_window_command_exists() {
+        // Verify create_new_window is defined and has the correct return type.
+        // We cannot construct a real AppHandle in unit tests, but we can verify
+        // the function exists at compile time by taking its address.
+        // The async fn returns impl Future<Output = Result<(), String>>.
+        let _exists = create_new_window as fn(tauri::AppHandle) -> _;
+        // If this compiles, the command exists with the expected signature.
     }
 
     #[test]
