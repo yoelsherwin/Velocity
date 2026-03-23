@@ -1078,6 +1078,7 @@ function Terminal({ paneId, onTitleChange }: TerminalProps) {
           ref={outputRef}
           className="terminal-output"
           data-testid="terminal-output"
+          onClick={(e) => { if (e.target === e.currentTarget) setFocusedBlockIndex(-1); }}
         >
           <SearchBar
             query={search.query}
@@ -1105,6 +1106,7 @@ function Terminal({ paneId, onTitleChange }: TerminalProps) {
                 isCollapsed={isCollapsed}
                 onToggleCollapse={() => toggleBlockCollapse(block.id)}
                 onRerun={handleRerun}
+                onSelect={() => setFocusedBlockIndex(index)}
                 onUseFix={handleUseFix}
                 isVisible={visibleIds.has(block.id)}
                 observeRef={(el) => observeBlock(block.id, el)}

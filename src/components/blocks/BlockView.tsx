@@ -14,6 +14,7 @@ interface BlockViewProps {
   isCollapsed?: boolean;    // true if this block's output is collapsed
   onToggleCollapse?: () => void;  // callback to toggle collapse state
   onRerun: (command: string) => void;
+  onSelect?: () => void;                // callback when block is clicked to select it
   onUseFix?: (command: string) => void;  // callback when user accepts a fix suggestion
   isVisible?: boolean;      // true if block is in or near the viewport
   observeRef?: (el: HTMLDivElement | null) => void;  // callback ref for IntersectionObserver
@@ -24,7 +25,7 @@ interface BlockViewProps {
   isMostRecentFailed?: boolean;  // whether this is the most recently failed block
 }
 
-function BlockView({ block, isActive, isFocused = false, isCollapsed = false, onToggleCollapse, onRerun, onUseFix, isVisible = true, observeRef, highlights, shellType, cwd, hasApiKey = false, isMostRecentFailed = false }: BlockViewProps) {
+function BlockView({ block, isActive, isFocused = false, isCollapsed = false, onToggleCollapse, onRerun, onSelect, onUseFix, isVisible = true, observeRef, highlights, shellType, cwd, hasApiKey = false, isMostRecentFailed = false }: BlockViewProps) {
   const formattedTime = useMemo(() => {
     return new Date(block.timestamp).toLocaleTimeString();
   }, [block.timestamp]);
@@ -56,6 +57,16 @@ function BlockView({ block, isActive, isFocused = false, isCollapsed = false, on
     onRerun(block.command);
   }, [onRerun, block.command]);
 
+  const handleClick = useCallback(() => {
+    if (onSelect) {
+      onSelect();
+    }
+  }, [onSelect]);
+
+  const handleActionsClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+  }, []);
+
   const isWelcome = block.command === '';
 
   return (
@@ -63,6 +74,7 @@ function BlockView({ block, isActive, isFocused = false, isCollapsed = false, on
       ref={observeRef}
       className={`block-container ${isActive && block.status === 'running' ? 'block-active' : ''} ${isFocused ? 'block-focused' : ''} ${isCollapsed ? 'block-collapsed' : ''}`}
       data-testid="block-container"
+      onClick={handleClick}
     >
       {!isWelcome && (
         <div className="block-header">
@@ -117,7 +129,7 @@ function BlockView({ block, isActive, isFocused = false, isCollapsed = false, on
         )
       )}
       {!isCollapsed && (
-        <div className="block-actions">
+        <div className="block-actions" onClick={handleActionsClick}>
           {!isWelcome && (
             <>
               <button className="block-action-btn" onClick={handleCopyCommand}>
