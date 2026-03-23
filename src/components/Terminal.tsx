@@ -17,7 +17,7 @@ import { computeTabTitle } from '../lib/tab-title';
 import { useKnownCommands } from '../hooks/useKnownCommands';
 import BlockView from './blocks/BlockView';
 import InputEditor from './editor/InputEditor';
-import TerminalGrid, { GridRow } from './TerminalGrid';
+import TerminalGrid, { GridRow, GridUpdatePayload } from './TerminalGrid';
 import SearchBar from './SearchBar';
 import HistorySearch from './HistorySearch';
 import { useCommandHistory } from '../hooks/useCommandHistory';
@@ -72,6 +72,9 @@ function Terminal({ paneId, onTitleChange }: TerminalProps) {
   const [focusedBlockIndex, setFocusedBlockIndex] = useState(-1);
   const [collapsedBlocks, setCollapsedBlocks] = useState<Set<string>>(new Set());
   const [gridRows, setGridRows] = useState<GridRow[]>([]);
+  const [cursorRow, setCursorRow] = useState<number>(0);
+  const [cursorCol, setCursorCol] = useState<number>(0);
+  const [cursorVisible, setCursorVisible] = useState<boolean>(true);
   const [agentLoading, setAgentLoading] = useState(false);
   const [agentError, setAgentError] = useState<string | null>(null);
   const [loadingLabel, setLoadingLabel] = useState<string>('Translating...');
@@ -350,10 +353,13 @@ function Terminal({ paneId, onTitleChange }: TerminalProps) {
           return;
         }
 
-        const unlistenGridUpdate = await listen<GridRow[]>(
+        const unlistenGridUpdate = await listen<GridUpdatePayload>(
           `pty:grid-update:${sid}`,
           (event) => {
-            setGridRows(event.payload);
+            setGridRows(event.payload.rows);
+            setCursorRow(event.payload.cursor_row);
+            setCursorCol(event.payload.cursor_col);
+            setCursorVisible(event.payload.cursor_visible);
           },
         );
 
@@ -1063,6 +1069,9 @@ function Terminal({ paneId, onTitleChange }: TerminalProps) {
         <TerminalGrid
           rows={gridRows}
           onKeyDown={handleGridKeyDown}
+          cursorRow={cursorRow}
+          cursorCol={cursorCol}
+          cursorVisible={cursorVisible}
         />
       ) : (
         <div

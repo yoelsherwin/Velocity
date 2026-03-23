@@ -148,15 +148,20 @@ describe('Terminal Alt Screen', () => {
       eventListeners['pty:alt-screen-enter:test-session-id']({ payload: { rows: 24, cols: 80 } });
     });
 
-    // Send grid update
-    const gridData = [
-      {
-        cells: [
-          { content: 'A', fg: null, bg: null, bold: false, italic: false, underline: false, dim: false },
-          { content: 'B', fg: null, bg: null, bold: false, italic: false, underline: false, dim: false },
-        ],
-      },
-    ];
+    // Send grid update with cursor info
+    const gridData = {
+      rows: [
+        {
+          cells: [
+            { content: 'A', fg: null, bg: null, bold: false, italic: false, underline: false, dim: false },
+            { content: 'B', fg: null, bg: null, bold: false, italic: false, underline: false, dim: false },
+          ],
+        },
+      ],
+      cursor_row: 0,
+      cursor_col: 1,
+      cursor_visible: true,
+    };
 
     await act(async () => {
       eventListeners['pty:grid-update:test-session-id']({ payload: gridData });
@@ -185,13 +190,18 @@ describe('Terminal Alt Screen', () => {
     const grid = await waitFor(() => screen.getByTestId('terminal-grid'));
 
     // Send grid update so grid has content
-    const gridData = [
-      {
-        cells: [
-          { content: ' ', fg: null, bg: null, bold: false, italic: false, underline: false, dim: false },
-        ],
-      },
-    ];
+    const gridData = {
+      rows: [
+        {
+          cells: [
+            { content: ' ', fg: null, bg: null, bold: false, italic: false, underline: false, dim: false },
+          ],
+        },
+      ],
+      cursor_row: 0,
+      cursor_col: 0,
+      cursor_visible: true,
+    };
     await act(async () => {
       eventListeners['pty:grid-update:test-session-id']({ payload: gridData });
     });

@@ -102,4 +102,93 @@ describe('TerminalGrid', () => {
     const gridRows = grid.querySelectorAll('.terminal-grid-row');
     expect(gridRows.length).toBe(0);
   });
+
+  it('test_terminal_grid_renders_cursor_at_position', () => {
+    const rows = [makeRow('Hello', 10), makeRow('World', 10)];
+    const onKeyDown = vi.fn();
+    render(
+      <TerminalGrid
+        rows={rows}
+        onKeyDown={onKeyDown}
+        cursorRow={0}
+        cursorCol={5}
+        cursorVisible={true}
+      />
+    );
+
+    const grid = screen.getByTestId('terminal-grid');
+    const cursorCell = grid.querySelector('.terminal-grid-cursor');
+    expect(cursorCell).toBeInTheDocument();
+    // Cursor should be on row 0, col 5 (the space after "Hello")
+    expect(cursorCell?.textContent).toBe(' ');
+  });
+
+  it('test_terminal_grid_cursor_hidden_when_not_visible', () => {
+    const rows = [makeRow('Hello', 10)];
+    const onKeyDown = vi.fn();
+    render(
+      <TerminalGrid
+        rows={rows}
+        onKeyDown={onKeyDown}
+        cursorRow={0}
+        cursorCol={0}
+        cursorVisible={false}
+      />
+    );
+
+    const grid = screen.getByTestId('terminal-grid');
+    const cursorCell = grid.querySelector('.terminal-grid-cursor');
+    expect(cursorCell).not.toBeInTheDocument();
+  });
+
+  it('test_terminal_grid_cursor_not_rendered_without_props', () => {
+    const rows = [makeRow('Hello', 10)];
+    const onKeyDown = vi.fn();
+    render(<TerminalGrid rows={rows} onKeyDown={onKeyDown} />);
+
+    const grid = screen.getByTestId('terminal-grid');
+    const cursorCell = grid.querySelector('.terminal-grid-cursor');
+    expect(cursorCell).not.toBeInTheDocument();
+  });
+
+  it('test_terminal_grid_cursor_on_second_row', () => {
+    const rows = [makeRow('Hello', 10), makeRow('World', 10)];
+    const onKeyDown = vi.fn();
+    render(
+      <TerminalGrid
+        rows={rows}
+        onKeyDown={onKeyDown}
+        cursorRow={1}
+        cursorCol={3}
+        cursorVisible={true}
+      />
+    );
+
+    const grid = screen.getByTestId('terminal-grid');
+    const gridRows = grid.querySelectorAll('.terminal-grid-row');
+    // Cursor should be in second row, 4th cell
+    const cursorCell = gridRows[1].querySelector('.terminal-grid-cursor');
+    expect(cursorCell).toBeInTheDocument();
+    expect(cursorCell?.textContent).toBe('l');
+  });
+
+  it('test_terminal_grid_cursor_blinks', () => {
+    const rows = [makeRow('Hello', 10)];
+    const onKeyDown = vi.fn();
+    render(
+      <TerminalGrid
+        rows={rows}
+        onKeyDown={onKeyDown}
+        cursorRow={0}
+        cursorCol={0}
+        cursorVisible={true}
+      />
+    );
+
+    const grid = screen.getByTestId('terminal-grid');
+    const cursorCell = grid.querySelector('.terminal-grid-cursor');
+    expect(cursorCell).toBeInTheDocument();
+    // Cursor should have the blink class
+    expect(cursorCell?.classList.contains('terminal-grid-cursor')).toBe(true);
+  });
 });
