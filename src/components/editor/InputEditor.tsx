@@ -1,7 +1,9 @@
 import { useMemo, useCallback, useRef, type RefObject } from 'react';
 import { tokenize } from '../../lib/shell-tokenizer';
 import { ClassificationResult } from '../../lib/intent-classifier';
+import type { GitInfo } from '../../lib/git';
 import ModeIndicator from './ModeIndicator';
+import GitContext from './GitContext';
 
 interface InputEditorProps {
   value: string;
@@ -16,9 +18,10 @@ interface InputEditorProps {
   textareaRef?: RefObject<HTMLTextAreaElement | null>;
   onTab?: () => void;
   onCursorChange?: (pos: number) => void;
+  gitInfo?: GitInfo | null;
 }
 
-function InputEditor({ value, onChange, onSubmit, disabled, ghostText, onNavigateUp, onNavigateDown, mode, onToggleMode, textareaRef: externalRef, onTab, onCursorChange }: InputEditorProps) {
+function InputEditor({ value, onChange, onSubmit, disabled, ghostText, onNavigateUp, onNavigateDown, mode, onToggleMode, textareaRef: externalRef, onTab, onCursorChange, gitInfo }: InputEditorProps) {
   const internalRef = useRef<HTMLTextAreaElement>(null);
   const textareaRef = externalRef || internalRef;
 
@@ -101,6 +104,7 @@ function InputEditor({ value, onChange, onSubmit, disabled, ghostText, onNavigat
           disabled={disabled}
         />
       )}
+      <GitContext gitInfo={gitInfo ?? null} />
       <span className="editor-prompt">{'\u276F'}</span>
       <div className="editor-area">
         <pre className="editor-highlight" aria-hidden="true">

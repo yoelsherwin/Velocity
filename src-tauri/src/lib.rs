@@ -27,6 +27,7 @@ pub fn run() {
             commands::get_known_commands,
             commands::get_completions,
             commands::classify_intent_llm,
+            commands::get_git_info,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

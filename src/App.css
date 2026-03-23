@@ -1045,6 +1045,39 @@ html, body, #root {
   font-size: 13px;
 }
 
+/* --- Git Context Styles --- */
+
+.git-context {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--terminal-font-family);
+  font-size: 12px;
+  margin-right: 6px;
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.git-branch {
+  color: var(--accent-blue);
+}
+
+.git-ahead {
+  color: var(--accent-green);
+}
+
+.git-behind {
+  color: var(--accent-peach);
+}
+
+.git-status-clean {
+  color: var(--accent-green);
+}
+
+.git-status-dirty {
+  color: var(--accent-yellow);
+}
+
 /* --- History Search Styles --- */
 
 .history-search {

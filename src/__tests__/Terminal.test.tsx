@@ -37,6 +37,12 @@ vi.mock('../lib/cwd', () => ({
   getCwd: (...args: unknown[]) => mockGetCwd(...args),
 }));
 
+const mockGetGitInfo = vi.fn();
+
+vi.mock('../lib/git', () => ({
+  getGitInfo: (...args: unknown[]) => mockGetGitInfo(...args),
+}));
+
 const mockInvoke = vi.fn();
 
 vi.mock('@tauri-apps/api/core', () => ({
@@ -64,6 +70,7 @@ describe('Terminal Component', () => {
     mockTranslateCommand.mockResolvedValue('dir');
     mockClassifyIntentLLM.mockResolvedValue('cli');
     mockGetCwd.mockResolvedValue('C:\\Users\\test');
+    mockGetGitInfo.mockResolvedValue({ branch: 'main', is_dirty: false, ahead: 0, behind: 0 });
     // Mock get_known_commands to return a set of known commands
     mockInvoke.mockImplementation((cmd: string) => {
       if (cmd === 'get_known_commands') {
@@ -1506,6 +1513,22 @@ describe('Terminal Component', () => {
       const ghostSpan = editor.querySelector('.ghost-text');
       expect(ghostSpan).not.toBeNull();
       expect(ghostSpan!.textContent).toBe('t');
+    });
+  });
+
+  it('test_terminal_fetches_git_info', async () => {
+    mockGetGitInfo.mockResolvedValue({ branch: 'develop', is_dirty: true, ahead: 1, behind: 2 });
+
+    render(<Terminal />);
+
+    await waitFor(() => {
+      expect(mockGetGitInfo).toHaveBeenCalledWith('C:\\Users\\test');
+    });
+
+    await waitFor(() => {
+      const gitContext = screen.getByTestId('git-context');
+      expect(gitContext).toBeInTheDocument();
+      expect(screen.getByTestId('git-branch').textContent).toBe('[develop]');
     });
   });
 });

@@ -7,6 +7,7 @@ import { extractExitCode, getExitCodeMarker } from '../lib/exit-code-parser';
 import { classifyIntent, stripHashPrefix, ClassificationResult } from '../lib/intent-classifier';
 import { translateCommand, classifyIntentLLM } from '../lib/llm';
 import { getCwd } from '../lib/cwd';
+import { getGitInfo, type GitInfo } from '../lib/git';
 import { stripAnsi } from '../lib/ansi';
 import { showCommandNotification, sendTestNotification } from '../lib/notifications';
 import { encodeKey } from '../lib/key-encoder';
@@ -77,6 +78,7 @@ function Terminal({ paneId }: TerminalProps) {
 
   const [cursorPos, setCursorPos] = useState(0);
   const [cwd, setCwd] = useState('C:\\');
+  const [gitInfo, setGitInfo] = useState<GitInfo | null>(null);
 
   const { history, addCommand, navigateUp, navigateDown, reset, setDraft } = useCommandHistory();
   const completions = useCompletions(input, cursorPos, history, knownCommands, cwd);
@@ -165,7 +167,10 @@ function Terminal({ paneId }: TerminalProps) {
             // `cd`) is not directly observable from the parent process, so this
             // returns the Tauri process CWD which may differ from the shell's CWD.
             if (commandCompleted) {
-              getCwd().then(setCwd).catch(() => {});
+              getCwd().then((dir) => {
+                setCwd(dir);
+                getGitInfo(dir).then(setGitInfo).catch(() => setGitInfo(null));
+              }).catch(() => {});
               // Show desktop notification for long-running commands
               if (completedBlockInfo) {
                 const { command, exitCode, timestamp } = completedBlockInfo;
@@ -208,7 +213,10 @@ function Terminal({ paneId }: TerminalProps) {
               }),
             );
             if (commandCompleted) {
-              getCwd().then(setCwd).catch(() => {});
+              getCwd().then((dir) => {
+                setCwd(dir);
+                getGitInfo(dir).then(setGitInfo).catch(() => setGitInfo(null));
+              }).catch(() => {});
               // Show desktop notification for long-running commands
               if (completedBlockInfo) {
                 const { command, exitCode, timestamp } = completedBlockInfo;
@@ -392,9 +400,12 @@ function Terminal({ paneId }: TerminalProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Fetch CWD for completions
+  // Fetch CWD and git info for completions and prompt display
   useEffect(() => {
-    getCwd().then(setCwd).catch(() => {});
+    getCwd().then((dir) => {
+      setCwd(dir);
+      getGitInfo(dir).then(setGitInfo).catch(() => setGitInfo(null));
+    }).catch(() => {});
   }, []);
 
   // Auto-scroll to bottom when blocks update
@@ -1049,6 +1060,7 @@ function Terminal({ paneId }: TerminalProps) {
             textareaRef={editorRef}
             onTab={handleTab}
             onCursorChange={handleCursorChange}
+            gitInfo={gitInfo}
           />
           {agentError && (
             <div className="agent-error" data-testid="agent-error">

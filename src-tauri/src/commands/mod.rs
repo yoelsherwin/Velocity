@@ -1,6 +1,7 @@
 use crate::llm;
 use crate::pty::SessionManager;
 use crate::settings::{self, AppSettings};
+use serde::Serialize;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tauri::State;
@@ -166,6 +167,104 @@ pub async fn classify_intent_llm(
         "cli" | "natural_language" => Ok(response.intent),
         _ => Ok("cli".to_string()), // Default to CLI if unexpected
     }
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct GitInfo {
+    pub branch: String,
+    pub is_dirty: bool,
+    pub ahead: u32,
+    pub behind: u32,
+}
+
+#[tauri::command]
+pub async fn get_git_info(cwd: String) -> Result<Option<GitInfo>, String> {
+    tokio::task::spawn_blocking(move || compute_git_info(&cwd))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// Core logic for `get_git_info` — extracted for testability without Tauri runtime.
+pub fn compute_git_info(cwd: &str) -> Result<Option<GitInfo>, String> {
+    // Validate cwd is a real directory
+    let cwd_path = std::path::Path::new(cwd);
+    if !cwd_path.is_dir() {
+        return Err(format!("Invalid directory: {}", cwd));
+    }
+
+    // Check if we're in a git repo by running `git rev-parse --is-inside-work-tree`
+    let is_repo = std::process::Command::new("git")
+        .arg("rev-parse")
+        .arg("--is-inside-work-tree")
+        .current_dir(cwd_path)
+        .output();
+
+    match is_repo {
+        Ok(output) => {
+            if !output.status.success() {
+                // Not a git repo
+                return Ok(None);
+            }
+        }
+        Err(e) => {
+            // git not installed or other error
+            return Err(format!("Failed to run git: {}", e));
+        }
+    }
+
+    // Get branch name
+    let branch_output = std::process::Command::new("git")
+        .arg("rev-parse")
+        .arg("--abbrev-ref")
+        .arg("HEAD")
+        .current_dir(cwd_path)
+        .output()
+        .map_err(|e| format!("Failed to get branch: {}", e))?;
+
+    let branch = String::from_utf8_lossy(&branch_output.stdout)
+        .trim()
+        .to_string();
+
+    // Get dirty status
+    let status_output = std::process::Command::new("git")
+        .arg("status")
+        .arg("--porcelain")
+        .current_dir(cwd_path)
+        .output()
+        .map_err(|e| format!("Failed to get status: {}", e))?;
+
+    let is_dirty = !status_output.stdout.is_empty();
+
+    // Get ahead/behind count — may fail if no upstream is set
+    let mut ahead: u32 = 0;
+    let mut behind: u32 = 0;
+
+    let revlist_output = std::process::Command::new("git")
+        .arg("rev-list")
+        .arg("--left-right")
+        .arg("--count")
+        .arg("HEAD...@{upstream}")
+        .current_dir(cwd_path)
+        .output();
+
+    if let Ok(output) = revlist_output {
+        if output.status.success() {
+            let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            let parts: Vec<&str> = text.split_whitespace().collect();
+            if parts.len() == 2 {
+                ahead = parts[0].parse().unwrap_or(0);
+                behind = parts[1].parse().unwrap_or(0);
+            }
+        }
+        // If it fails (no upstream), we default to 0/0 — that's fine
+    }
+
+    Ok(Some(GitInfo {
+        branch,
+        is_dirty,
+        ahead,
+        behind,
+    }))
 }
 
 /// Collect known commands (PATH scan + builtins). Extracted for reuse by completions.
@@ -487,6 +586,45 @@ mod tests {
         assert!(cwd.is_ok());
         let cwd_str = cwd.unwrap().to_string_lossy().to_string();
         assert!(!cwd_str.is_empty());
+    }
+
+    #[test]
+    fn test_git_info_in_git_repo() {
+        // Run in the project's own repo (parent of src-tauri)
+        let project_dir = std::env::current_dir().unwrap();
+        // If running from src-tauri, go up one level
+        let repo_dir = if project_dir.join(".git").is_dir() {
+            project_dir
+        } else {
+            project_dir.parent().unwrap().to_path_buf()
+        };
+
+        let result = compute_git_info(&repo_dir.to_string_lossy());
+        assert!(result.is_ok(), "Should succeed in a git repo");
+        let git_info = result.unwrap();
+        assert!(git_info.is_some(), "Should return Some in a git repo");
+        let info = git_info.unwrap();
+        assert!(!info.branch.is_empty(), "Branch name should not be empty");
+    }
+
+    #[test]
+    fn test_git_info_outside_repo() {
+        // Use a temp dir that's not a git repo
+        let dir = std::env::temp_dir().join("velocity_test_no_git");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
+        let result = compute_git_info(&dir.to_string_lossy());
+        assert!(result.is_ok(), "Should not error for non-repo dir");
+        assert!(result.unwrap().is_none(), "Should return None for non-repo dir");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_git_info_invalid_cwd() {
+        let result = compute_git_info("C:\\this_path_does_not_exist_velocity_999");
+        assert!(result.is_err(), "Should return error for invalid path");
     }
 
     #[test]
