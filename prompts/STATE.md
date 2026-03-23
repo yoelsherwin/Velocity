@@ -27,6 +27,18 @@
 ## In Progress
 None.
 
+## Phase 2 Progress
+
+| # | Feature | Status |
+|---|---------|--------|
+| P1-U2 | Custom fonts + size/line-height config | **DONE** (`c6e43ae` + `30a14be`) |
+| P1-B1 | Block navigation (Ctrl+Up/Down) | **DONE** (`66f9534`) |
+| P1-U5 | Desktop notifications (long commands) | **DONE** (`c9c747e`) |
+| P1-U7 | Quit warning (running processes) | **DONE** (`7d6b546`) |
+| P1-I2 | History search (Ctrl+R) | **DONE** (`2ea1e4a`) |
+| P1-U1 | Custom themes + theme library | **DONE** (`f836755` + `a41fd3b`) |
+| P1-B3 | Block collapse/expand | **DONE** (`589da48` + `196f5a8`) |
+
 ## Outstanding Issues
 
 ### Medium (from Phase 1 reviews)
@@ -46,6 +58,13 @@ None.
 - QA-022 BUG-007: CWD for completions is Tauri process CWD, not shell CWD after cd
 - QA-024 BUG-001: Grid throttling can drop the final update before alt screen exit
 - SEC-025-01: Default-to-CLI on LLM failure inverts safe default (should default to NL preview)
+- QA-026 BUG-001: applyFontSettings never removes CSS properties when fonts cleared (can't revert to defaults)
+- QA-027 BUG-001: Block nav Ctrl+Up/Down swallowed during alt screen mode
+- QA-028 BUG-001: Notification fires for empty welcome block if shell startup >10s
+- QA-029 BUG-002: beforeunload may not work in all WebView2 configurations
+- QA-030 BUG-001: matchIndex desync if history changes during search
+- QA-030 BUG-002: Ctrl+R opens history search during alt screen mode
+- QA-031 BUG-001: Theme preview not reverted on Cancel in SettingsModal
 
 ### Low
 - BUG-010, 028, 029, 031, 032, 035, 038, 040, 041
@@ -72,11 +91,11 @@ None.
 
 | Layer | Count |
 |-------|-------|
-| Vitest (frontend) | 359 |
-| cargo test (Rust unit) | 105 (+1 ignored) |
+| Vitest (frontend) | 431 |
+| cargo test (Rust unit) | 117 (+1 ignored) |
 | Rust integration | 11 |
-| Playwright E2E | 27 |
-| **Total** | **~502** |
+| Playwright E2E | 28 |
+| **Total** | **~587** |
 
 ## Remaining Phase 1 Roadmap
 
