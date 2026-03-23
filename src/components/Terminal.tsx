@@ -8,6 +8,7 @@ import { classifyIntent, stripHashPrefix, ClassificationResult } from '../lib/in
 import { translateCommand, classifyIntentLLM } from '../lib/llm';
 import { getCwd } from '../lib/cwd';
 import { stripAnsi } from '../lib/ansi';
+import { showCommandNotification, sendTestNotification } from '../lib/notifications';
 import { encodeKey } from '../lib/key-encoder';
 import { useKnownCommands } from '../hooks/useKnownCommands';
 import BlockView from './blocks/BlockView';
@@ -134,6 +135,7 @@ function Terminal({ paneId }: TerminalProps) {
           `pty:output:${sid}`,
           (event) => {
             let commandCompleted = false;
+            let completedBlockInfo: { command: string; exitCode: number; timestamp: number } | null = null;
             setBlocks((prev) =>
               prev.map((b) => {
                 if (b.id !== activeBlockIdRef.current) return b;
@@ -145,6 +147,7 @@ function Terminal({ paneId }: TerminalProps) {
                 const { cleanOutput, exitCode } = extractExitCode(newOutput);
                 if (exitCode !== null) {
                   commandCompleted = true;
+                  completedBlockInfo = { command: b.command, exitCode, timestamp: b.timestamp };
                 }
                 return {
                   ...b,
@@ -159,6 +162,11 @@ function Terminal({ paneId }: TerminalProps) {
             // returns the Tauri process CWD which may differ from the shell's CWD.
             if (commandCompleted) {
               getCwd().then(setCwd).catch(() => {});
+              // Show desktop notification for long-running commands
+              if (completedBlockInfo) {
+                const { command, exitCode, timestamp } = completedBlockInfo;
+                showCommandNotification(command, exitCode, timestamp).catch(() => {});
+              }
             }
           },
         );
@@ -174,6 +182,7 @@ function Terminal({ paneId }: TerminalProps) {
           `pty:output-replace:${sid}`,
           (event) => {
             let commandCompleted = false;
+            let completedBlockInfo: { command: string; exitCode: number; timestamp: number } | null = null;
             setBlocks((prev) =>
               prev.map((b) => {
                 if (b.id !== activeBlockIdRef.current) return b;
@@ -185,6 +194,7 @@ function Terminal({ paneId }: TerminalProps) {
                 const { cleanOutput, exitCode } = extractExitCode(newOutput);
                 if (exitCode !== null) {
                   commandCompleted = true;
+                  completedBlockInfo = { command: b.command, exitCode, timestamp: b.timestamp };
                 }
                 return {
                   ...b,
@@ -195,6 +205,11 @@ function Terminal({ paneId }: TerminalProps) {
             );
             if (commandCompleted) {
               getCwd().then(setCwd).catch(() => {});
+              // Show desktop notification for long-running commands
+              if (completedBlockInfo) {
+                const { command, exitCode, timestamp } = completedBlockInfo;
+                showCommandNotification(command, exitCode, timestamp).catch(() => {});
+              }
             }
           },
         );
@@ -736,6 +751,9 @@ function Terminal({ paneId }: TerminalProps) {
           } else {
             search.open();
           }
+          break;
+        case 'notifications.test':
+          sendTestNotification().catch(() => {});
           break;
         default:
           break;
