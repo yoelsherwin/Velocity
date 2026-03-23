@@ -1040,6 +1040,30 @@ html, body, #root {
   font-size: 13px;
 }
 
+/* --- Secret Redaction Styles --- */
+
+.secret-mask {
+  cursor: pointer;
+  border-radius: 2px;
+  padding: 0 1px;
+  background-color: rgba(243, 139, 168, 0.15);
+  transition: background-color 0.2s;
+}
+
+.secret-mask:hover {
+  background-color: rgba(243, 139, 168, 0.3);
+}
+
+.secret-mask:focus-visible {
+  outline: 1px solid var(--accent-red);
+  outline-offset: 1px;
+}
+
+.secret-revealed {
+  background-color: rgba(249, 226, 175, 0.3);
+  color: var(--accent-yellow);
+}
+
 /* --- History Search Styles --- */
 
 .history-search {

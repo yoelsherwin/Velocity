@@ -1,6 +1,8 @@
 import React, { useCallback, useMemo } from 'react';
 import { Block } from '../../lib/types';
 import { stripAnsi } from '../../lib/ansi';
+import { maskSecrets } from '../../lib/secretRedaction';
+import { useSecretRedaction } from '../../hooks/useSecretRedaction';
 import AnsiOutput, { HighlightRange } from '../AnsiOutput';
 import { estimateBlockHeight } from '../../hooks/useBlockVisibility';
 
@@ -21,6 +23,8 @@ function BlockView({ block, isActive, isFocused = false, isCollapsed = false, on
     return new Date(block.timestamp).toLocaleTimeString();
   }, [block.timestamp]);
 
+  const { segments: redactedSegments, revealedIds, revealSecret } = useSecretRedaction(block.output);
+
   const handleCopyCommand = useCallback(() => {
     navigator.clipboard.writeText(block.command).catch(() => {
       // Clipboard write failed — silently ignore (user can manually select + copy)
@@ -28,6 +32,15 @@ function BlockView({ block, isActive, isFocused = false, isCollapsed = false, on
   }, [block.command]);
 
   const handleCopyOutput = useCallback(() => {
+    // Copy masked text by default to prevent accidental secret exposure
+    const stripped = stripAnsi(block.output);
+    navigator.clipboard.writeText(maskSecrets(stripped)).catch(() => {
+      // Clipboard write failed — silently ignore
+    });
+  }, [block.output]);
+
+  const handleCopyRawOutput = useCallback(() => {
+    // Copy raw (unmasked) text — explicit user action
     navigator.clipboard.writeText(stripAnsi(block.output)).catch(() => {
       // Clipboard write failed — silently ignore
     });
@@ -81,7 +94,13 @@ function BlockView({ block, isActive, isFocused = false, isCollapsed = false, on
       {!isCollapsed && block.output && (
         isVisible ? (
           <pre className="block-output" data-testid="block-output">
-            <AnsiOutput text={block.output} highlights={highlights} />
+            <AnsiOutput
+              text={block.output}
+              highlights={highlights}
+              redactedSegments={redactedSegments}
+              revealedSecretIds={revealedIds}
+              onRevealSecret={revealSecret}
+            />
           </pre>
         ) : (
           <pre
@@ -105,6 +124,9 @@ function BlockView({ block, isActive, isFocused = false, isCollapsed = false, on
           )}
           <button className="block-action-btn" onClick={handleCopyOutput}>
             Copy Output
+          </button>
+          <button className="block-action-btn" onClick={handleCopyRawOutput}>
+            Copy Raw
           </button>
         </div>
       )}
