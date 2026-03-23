@@ -17,6 +17,7 @@ export const COMMANDS: Command[] = [
   { id: 'block.collapseAll', title: 'Collapse All Blocks', category: 'Block', keywords: ['collapse', 'fold', 'hide'] },
   { id: 'block.expandAll', title: 'Expand All Blocks', category: 'Block', keywords: ['expand', 'unfold', 'show'] },
   { id: 'block.toggleCollapse', title: 'Toggle Block Collapse', category: 'Block', keywords: ['collapse', 'expand', 'fold', 'toggle'] },
+  { id: 'block.filter', title: 'Filter Block Output', category: 'Block', keywords: ['filter', 'grep', 'search', 'lines'] },
   { id: 'search.find', title: 'Find in Output', shortcut: 'Ctrl+Shift+F', category: 'Search', keywords: ['search', 'grep'] },
   { id: 'settings.open', title: 'Open Settings', category: 'Settings', keywords: ['preferences', 'config'] },
   { id: 'shell.powershell', title: 'Switch to PowerShell', category: 'Terminal', keywords: ['shell'] },

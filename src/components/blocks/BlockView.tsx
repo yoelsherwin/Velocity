@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState, useRef } from 'react';
 import { Block } from '../../lib/types';
 import { stripAnsi } from '../../lib/ansi';
 import { maskSecrets } from '../../lib/secretRedaction';
@@ -6,6 +6,7 @@ import { useSecretRedaction } from '../../hooks/useSecretRedaction';
 import AnsiOutput, { HighlightRange } from '../AnsiOutput';
 import { estimateBlockHeight } from '../../hooks/useBlockVisibility';
 import ErrorSuggestion from './ErrorSuggestion';
+import { getTypoCorrection } from '../../lib/command-corrections';
 
 interface BlockViewProps {
   block: Block;
@@ -23,14 +24,55 @@ interface BlockViewProps {
   cwd?: string;             // current working directory for error suggestion context
   hasApiKey?: boolean;      // whether an API key is configured
   isMostRecentFailed?: boolean;  // whether this is the most recently failed block
+  knownCommands?: Set<string>;  // known commands for typo correction
 }
 
-function BlockView({ block, isActive, isFocused = false, isCollapsed = false, onToggleCollapse, onRerun, onSelect, onUseFix, isVisible = true, observeRef, highlights, shellType, cwd, hasApiKey = false, isMostRecentFailed = false }: BlockViewProps) {
+function BlockView({ block, isActive, isFocused = false, isCollapsed = false, onToggleCollapse, onRerun, onSelect, onUseFix, isVisible = true, observeRef, highlights, shellType, cwd, hasApiKey = false, isMostRecentFailed = false, knownCommands }: BlockViewProps) {
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [filterText, setFilterText] = useState('');
+  const filterInputRef = useRef<HTMLInputElement>(null);
+
   const formattedTime = useMemo(() => {
     return new Date(block.timestamp).toLocaleTimeString();
   }, [block.timestamp]);
 
   const { segments: redactedSegments, revealedIds, revealSecret } = useSecretRedaction(block.output);
+
+  // Split output into lines for filtering. Each entry is the original (ANSI) line.
+  const outputLines = useMemo(() => block.output.split('\n'), [block.output]);
+
+  // Compute filtered output: keep only lines whose stripped text matches filter
+  const { filteredOutput, matchCount, totalCount } = useMemo(() => {
+    const total = outputLines.length;
+    if (!filterOpen || !filterText) {
+      return { filteredOutput: block.output, matchCount: total, totalCount: total };
+    }
+    const lowerFilter = filterText.toLowerCase();
+    const matching = outputLines.filter(line => stripAnsi(line).toLowerCase().includes(lowerFilter));
+    return {
+      filteredOutput: matching.join('\n'),
+      matchCount: matching.length,
+      totalCount: total,
+    };
+  }, [block.output, outputLines, filterOpen, filterText]);
+
+  const handleOpenFilter = useCallback(() => {
+    setFilterOpen(true);
+    setFilterText('');
+    // Focus the input after it renders
+    setTimeout(() => filterInputRef.current?.focus(), 0);
+  }, []);
+
+  const handleCloseFilter = useCallback(() => {
+    setFilterOpen(false);
+    setFilterText('');
+  }, []);
+
+  const handleFilterKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      handleCloseFilter();
+    }
+  }, [handleCloseFilter]);
 
   const handleCopyCommand = useCallback(() => {
     navigator.clipboard.writeText(block.command).catch(() => {
@@ -66,6 +108,23 @@ function BlockView({ block, isActive, isFocused = false, isCollapsed = false, on
   const handleActionsClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
   }, []);
+
+  // Typo correction: compute once per block when it's a failed command
+  const typoCorrection = useMemo(() => {
+    if (!isMostRecentFailed || block.exitCode == null || block.exitCode === 0 || block.status !== 'completed') {
+      return null;
+    }
+    if (!knownCommands || knownCommands.size === 0) {
+      return null;
+    }
+    return getTypoCorrection(block.command, block.output, knownCommands);
+  }, [block.command, block.output, block.exitCode, block.status, isMostRecentFailed, knownCommands]);
+
+  const handleUseTypoCorrection = useCallback(() => {
+    if (typoCorrection && onUseFix) {
+      onUseFix(typoCorrection);
+    }
+  }, [typoCorrection, onUseFix]);
 
   const isWelcome = block.command === '';
 
@@ -109,11 +168,36 @@ function BlockView({ block, isActive, isFocused = false, isCollapsed = false, on
           </div>
         </div>
       )}
+      {!isCollapsed && filterOpen && (
+        <div className="block-filter-bar" data-testid="block-filter-bar">
+          <input
+            ref={filterInputRef}
+            className="block-filter-input"
+            data-testid="block-filter-input"
+            type="text"
+            placeholder="Filter lines..."
+            value={filterText}
+            onChange={e => setFilterText(e.target.value)}
+            onKeyDown={handleFilterKeyDown}
+          />
+          <span className="block-filter-count" data-testid="block-filter-count">
+            {matchCount} of {totalCount} lines
+          </span>
+          <button
+            className="block-filter-close"
+            data-testid="block-filter-close"
+            onClick={handleCloseFilter}
+            aria-label="Close filter"
+          >
+            ✕
+          </button>
+        </div>
+      )}
       {!isCollapsed && block.output && (
         isVisible ? (
           <pre className="block-output" data-testid="block-output">
             <AnsiOutput
-              text={block.output}
+              text={filteredOutput}
               highlights={highlights}
               redactedSegments={redactedSegments}
               revealedSecretIds={revealedIds}
@@ -146,18 +230,37 @@ function BlockView({ block, isActive, isFocused = false, isCollapsed = false, on
           <button className="block-action-btn" onClick={handleCopyRawOutput}>
             Copy Raw
           </button>
+          <button className="block-action-btn" onClick={handleOpenFilter}>
+            Filter
+          </button>
         </div>
       )}
       {!isCollapsed && isMostRecentFailed && block.exitCode != null && block.exitCode !== 0 && block.status === 'completed' && onUseFix && (
-        <ErrorSuggestion
-          command={block.command}
-          exitCode={block.exitCode}
-          output={block.output}
-          shellType={shellType || block.shellType}
-          cwd={cwd || 'C:\\'}
-          hasApiKey={hasApiKey}
-          onUseFix={onUseFix}
-        />
+        typoCorrection ? (
+          <div className="error-suggestion" data-testid="typo-correction">
+            <span className="error-suggestion-label">Did you mean:</span>
+            <code className="error-suggestion-command" data-testid="typo-correction-command">
+              {typoCorrection}
+            </code>
+            <button
+              className="error-suggestion-btn error-suggestion-use"
+              data-testid="typo-correction-use"
+              onClick={handleUseTypoCorrection}
+            >
+              Use
+            </button>
+          </div>
+        ) : (
+          <ErrorSuggestion
+            command={block.command}
+            exitCode={block.exitCode}
+            output={block.output}
+            shellType={shellType || block.shellType}
+            cwd={cwd || 'C:\\'}
+            hasApiKey={hasApiKey}
+            onUseFix={onUseFix}
+          />
+        )
       )}
     </div>
   );

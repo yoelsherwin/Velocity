@@ -1211,6 +1211,61 @@ html, body, #root {
   border-radius: 1px;
 }
 
+/* --- Block Filter Styles --- */
+
+.block-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background-color: var(--bg-surface);
+  border-bottom: 1px solid var(--bg-overlay);
+}
+
+.block-filter-input {
+  width: 200px;
+  padding: 2px 6px;
+  border: 1px solid var(--bg-overlay);
+  border-radius: 4px;
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--terminal-font-family);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.block-filter-input:focus {
+  border-color: var(--accent-blue);
+}
+
+.block-filter-input::placeholder {
+  color: var(--text-muted);
+}
+
+.block-filter-count {
+  color: var(--text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.block-filter-close {
+  padding: 2px 6px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.block-filter-close:hover {
+  background-color: var(--bg-overlay);
+  color: var(--accent-red);
+}
+
 /* --- Error Suggestion Styles --- */
 
 .error-suggestion {
