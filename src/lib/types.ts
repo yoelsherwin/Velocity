@@ -40,6 +40,7 @@ export interface AppSettings {
   font_family?: string;
   font_size?: number;
   line_height?: number;
+  theme?: string;
 }
 
 export const LLM_PROVIDERS = [

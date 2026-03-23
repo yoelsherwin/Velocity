@@ -87,6 +87,10 @@ describe('SettingsModal', () => {
         api_key: 'my-api-key',
         model: 'gpt-4o-mini',
         azure_endpoint: undefined,
+        theme: 'catppuccin-mocha',
+        font_family: undefined,
+        font_size: undefined,
+        line_height: undefined,
       });
     });
   });
@@ -251,5 +255,57 @@ describe('SettingsModal', () => {
 
     const lineHeightInput = screen.getByTestId('settings-line-height') as HTMLInputElement;
     expect(lineHeightInput.value).toBe('1.8');
+  });
+
+  it('test_settings_modal_renders_theme_picker', async () => {
+    render(<SettingsModal onClose={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('settings-modal')).toBeInTheDocument();
+    });
+
+    const themeSelect = screen.getByTestId('settings-theme') as HTMLSelectElement;
+    expect(themeSelect).toBeInTheDocument();
+    // Default theme should be catppuccin-mocha
+    expect(themeSelect.value).toBe('catppuccin-mocha');
+    // Should have multiple theme options
+    expect(themeSelect.options.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('test_theme_setting_persists', async () => {
+    mockGetSettings.mockResolvedValue({
+      llm_provider: 'openai',
+      api_key: '',
+      model: 'gpt-4o-mini',
+      theme: 'dracula',
+    });
+
+    render(<SettingsModal onClose={vi.fn()} />);
+
+    await waitFor(() => {
+      const themeSelect = screen.getByTestId('settings-theme') as HTMLSelectElement;
+      expect(themeSelect.value).toBe('dracula');
+    });
+  });
+
+  it('test_theme_saves_with_settings', async () => {
+    render(<SettingsModal onClose={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('settings-modal')).toBeInTheDocument();
+    });
+
+    // Change theme
+    const themeSelect = screen.getByTestId('settings-theme');
+    fireEvent.change(themeSelect, { target: { value: 'one-dark' } });
+
+    // Save
+    fireEvent.click(screen.getByTestId('settings-save-btn'));
+
+    await waitFor(() => {
+      expect(mockSaveSettings).toHaveBeenCalledTimes(1);
+      const savedSettings = mockSaveSettings.mock.calls[0][0];
+      expect(savedSettings.theme).toBe('one-dark');
+    });
   });
 });

@@ -5,8 +5,9 @@ import TabBar from './TabBar';
 import PaneContainer from './PaneContainer';
 import SettingsModal from '../SettingsModal';
 import CommandPalette from '../CommandPalette';
-import { getSettings } from '../../lib/settings';
+import { getSettings, saveSettings } from '../../lib/settings';
 import { applyFontSettings } from '../../lib/font-settings';
+import { applyThemeById, isValidThemeId, DEFAULT_THEME_ID } from '../../lib/themes';
 
 const MAX_PANES_TOTAL = 20;
 
@@ -52,10 +53,13 @@ function TabManager() {
     focusedPaneIdRef.current = focusedPaneId;
   }, [focusedPaneId]);
 
-  // Load font settings on startup and apply them to CSS custom properties
+  // Load settings on startup and apply theme + fonts to CSS custom properties
   useEffect(() => {
     getSettings()
-      .then((settings) => applyFontSettings(settings))
+      .then((settings) => {
+        applyThemeById(settings.theme ?? DEFAULT_THEME_ID);
+        applyFontSettings(settings);
+      })
       .catch(() => {
         // Ignore errors — CSS defaults remain in effect
       });
@@ -277,10 +281,25 @@ function TabManager() {
         case 'settings.open':
           setSettingsOpen(true);
           break;
+        case 'theme.select':
+          setSettingsOpen(true);
+          break;
         case 'palette.open':
           // No-op: palette is already open
           break;
         default:
+          // Handle theme.* quick-switch commands
+          if (commandId.startsWith('theme.')) {
+            const themeId = commandId.slice('theme.'.length);
+            if (isValidThemeId(themeId)) {
+              applyThemeById(themeId);
+              // Persist the theme setting
+              getSettings()
+                .then((settings) => saveSettings({ ...settings, theme: themeId }))
+                .catch(() => { /* ignore save errors */ });
+              break;
+            }
+          }
           // Terminal-level actions dispatched via custom event
           dispatchToFocusedTerminal(commandId);
           break;

@@ -27,4 +27,10 @@ export const COMMANDS: Command[] = [
   { id: 'palette.open', title: 'Command Palette', shortcut: 'Ctrl+Shift+P', category: 'General', keywords: ['commands', 'actions'] },
   { id: 'notifications.test', title: 'Test Notification', category: 'Terminal', keywords: ['notify', 'desktop', 'alert'] },
   { id: 'history.search', title: 'Search History', shortcut: 'Ctrl+R', category: 'Navigation', keywords: ['reverse', 'history', 'find', 'command'] },
+  { id: 'theme.select', title: 'Change Theme', category: 'Appearance', keywords: ['theme', 'color', 'dark', 'light'] },
+  { id: 'theme.catppuccin-mocha', title: 'Theme: Catppuccin Mocha', category: 'Appearance', keywords: ['theme', 'dark'] },
+  { id: 'theme.catppuccin-latte', title: 'Theme: Catppuccin Latte', category: 'Appearance', keywords: ['theme', 'light'] },
+  { id: 'theme.dracula', title: 'Theme: Dracula', category: 'Appearance', keywords: ['theme', 'dark'] },
+  { id: 'theme.one-dark', title: 'Theme: One Dark', category: 'Appearance', keywords: ['theme', 'dark'] },
+  { id: 'theme.solarized-dark', title: 'Theme: Solarized Dark', category: 'Appearance', keywords: ['theme', 'dark'] },
 ];

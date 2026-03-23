@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { AppSettings, LLM_PROVIDERS, LlmProviderId } from '../lib/types';
 import { getSettings, saveSettings } from '../lib/settings';
 import { applyFontSettings } from '../lib/font-settings';
+import { THEMES, DEFAULT_THEME_ID, applyThemeById } from '../lib/themes';
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -13,6 +14,7 @@ function SettingsModal({ onClose }: SettingsModalProps) {
   const [model, setModel] = useState('gpt-4o-mini');
   const [azureEndpoint, setAzureEndpoint] = useState('');
   const [showApiKey, setShowApiKey] = useState(false);
+  const [theme, setTheme] = useState(DEFAULT_THEME_ID);
   const [fontFamily, setFontFamily] = useState('');
   const [fontSize, setFontSize] = useState<string>('');
   const [lineHeight, setLineHeight] = useState<string>('');
@@ -30,6 +32,7 @@ function SettingsModal({ onClose }: SettingsModalProps) {
         setApiKey(settings.api_key);
         setModel(settings.model);
         setAzureEndpoint(settings.azure_endpoint ?? '');
+        setTheme(settings.theme ?? DEFAULT_THEME_ID);
         setFontFamily(settings.font_family ?? '');
         setFontSize(settings.font_size != null ? String(settings.font_size) : '');
         setLineHeight(settings.line_height != null ? String(settings.line_height) : '');
@@ -55,6 +58,12 @@ function SettingsModal({ onClose }: SettingsModalProps) {
     }
   };
 
+  const handleThemeChange = (newThemeId: string) => {
+    setTheme(newThemeId);
+    // Apply preview immediately
+    applyThemeById(newThemeId);
+  };
+
   const handleSave = async () => {
     setSaving(true);
     setError(null);
@@ -65,6 +74,7 @@ function SettingsModal({ onClose }: SettingsModalProps) {
       api_key: apiKey,
       model,
       azure_endpoint: provider === 'azure' ? azureEndpoint || undefined : undefined,
+      theme,
       font_family: fontFamily || undefined,
       font_size: parsedFontSize && !isNaN(parsedFontSize) ? parsedFontSize : undefined,
       line_height: parsedLineHeight && !isNaN(parsedLineHeight) ? parsedLineHeight : undefined,
@@ -72,6 +82,7 @@ function SettingsModal({ onClose }: SettingsModalProps) {
     try {
       await saveSettings(settings);
       applyFontSettings(settings);
+      applyThemeById(settings.theme ?? DEFAULT_THEME_ID);
       onClose();
     } catch (err) {
       setError(String(err));
@@ -108,9 +119,26 @@ function SettingsModal({ onClose }: SettingsModalProps) {
             {error && <div className="settings-error">{error}</div>}
 
             {/* Appearance */}
-            <h3 style={{ color: '#cdd6f4', fontSize: '15px', fontWeight: 600, margin: '4px 0 0 0' }}>
+            <h3 style={{ color: 'var(--text-primary)', fontSize: '15px', fontWeight: 600, margin: '4px 0 0 0' }}>
               Appearance
             </h3>
+
+            <label className="settings-label" htmlFor="settings-theme">
+              Theme
+            </label>
+            <select
+              id="settings-theme"
+              data-testid="settings-theme"
+              className="settings-select"
+              value={theme}
+              onChange={(e) => handleThemeChange(e.target.value)}
+            >
+              {THEMES.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
 
             <label className="settings-label" htmlFor="settings-font-family">
               Font Family
@@ -165,16 +193,16 @@ function SettingsModal({ onClose }: SettingsModalProps) {
                 fontSize: fontSize ? `${fontSize}px` : '14px',
                 lineHeight: lineHeight || '1.4',
                 padding: '8px 12px',
-                backgroundColor: '#313244',
+                backgroundColor: 'var(--bg-surface)',
                 borderRadius: '4px',
-                color: '#cdd6f4',
+                color: 'var(--text-primary)',
                 whiteSpace: 'pre',
               }}
             >
               {'$ echo "Hello, World!"'}
             </div>
 
-            <div style={{ borderBottom: '1px solid #313244', margin: '4px 0' }} />
+            <div style={{ borderBottom: '1px solid var(--border-color)', margin: '4px 0' }} />
 
             {/* Provider */}
             <label className="settings-label" htmlFor="settings-provider">

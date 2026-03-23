@@ -13,6 +13,8 @@ pub struct AppSettings {
     pub font_size: Option<u16>,
     #[serde(default)]
     pub line_height: Option<f32>,
+    #[serde(default)]
+    pub theme: Option<String>,
 }
 
 impl Default for AppSettings {
@@ -25,12 +27,22 @@ impl Default for AppSettings {
             font_family: None,
             font_size: None,
             line_height: None,
+            theme: None,
         }
     }
 }
 
 /// Valid LLM provider identifiers.
 const VALID_PROVIDERS: &[&str] = &["openai", "anthropic", "google", "azure"];
+
+/// Valid built-in theme identifiers.
+const VALID_THEMES: &[&str] = &[
+    "catppuccin-mocha",
+    "catppuccin-latte",
+    "dracula",
+    "one-dark",
+    "solarized-dark",
+];
 
 /// Returns the path to the settings JSON file.
 /// Creates the Velocity directory under the user's local app data if it does not exist.
@@ -106,6 +118,12 @@ pub fn validate_settings(settings: &AppSettings) -> Result<(), String> {
         }
     }
 
+    if let Some(ref theme) = settings.theme {
+        if !VALID_THEMES.contains(&theme.as_str()) {
+            return Err(format!("Invalid theme: {}", theme));
+        }
+    }
+
     if let Some(ref family) = settings.font_family {
         if family.is_empty() {
             return Err("Font family cannot be empty".to_string());
@@ -144,6 +162,7 @@ mod tests {
             font_family: None,
             font_size: None,
             line_height: None,
+            theme: None,
         };
 
         let json = serde_json::to_string_pretty(&settings).unwrap();
@@ -162,6 +181,7 @@ mod tests {
             font_family: None,
             font_size: None,
             line_height: None,
+            theme: None,
         };
 
         let json = serde_json::to_string_pretty(&settings).unwrap();
@@ -316,6 +336,7 @@ mod tests {
             font_family: None,
             font_size: None,
             line_height: None,
+            theme: None,
         };
 
         // 7 rejected
@@ -349,6 +370,7 @@ mod tests {
             font_family: None,
             font_size: None,
             line_height: None,
+            theme: None,
         };
 
         // 0.9 rejected
@@ -382,6 +404,7 @@ mod tests {
             font_family: Some("".to_string()),
             font_size: None,
             line_height: None,
+            theme: None,
         };
         assert!(validate_settings(&settings).is_err());
     }
@@ -409,6 +432,7 @@ mod tests {
                 font_family: Some(input.to_string()),
                 font_size: None,
                 line_height: None,
+                theme: None,
             };
             let result = validate_settings(&settings);
             assert!(result.is_err(), "Should reject font_family: {:?}", input);
@@ -438,6 +462,7 @@ mod tests {
                 font_family: Some(input.to_string()),
                 font_size: None,
                 line_height: None,
+                theme: None,
             };
             assert!(validate_settings(&settings).is_ok(), "Should accept font_family: {:?}", input);
         }
@@ -454,7 +479,60 @@ mod tests {
             font_family: Some(long_name),
             font_size: None,
             line_height: None,
+            theme: None,
         };
         assert!(validate_settings(&settings).is_err());
+    }
+
+    #[test]
+    fn test_settings_with_theme_deserialize() {
+        let json = r#"{
+            "llm_provider": "openai",
+            "api_key": "test-key",
+            "model": "gpt-4o-mini",
+            "theme": "dracula"
+        }"#;
+        let settings: AppSettings = serde_json::from_str(json).unwrap();
+        assert_eq!(settings.theme, Some("dracula".to_string()));
+    }
+
+    #[test]
+    fn test_settings_without_theme_backward_compat() {
+        let json = r#"{
+            "llm_provider": "openai",
+            "api_key": "test-key",
+            "model": "gpt-4o-mini"
+        }"#;
+        let settings: AppSettings = serde_json::from_str(json).unwrap();
+        assert_eq!(settings.theme, None);
+        assert_eq!(settings.llm_provider, "openai");
+    }
+
+    #[test]
+    fn test_theme_validation() {
+        // Valid themes accepted
+        for theme in &["catppuccin-mocha", "catppuccin-latte", "dracula", "one-dark", "solarized-dark"] {
+            let settings = AppSettings {
+                theme: Some(theme.to_string()),
+                ..Default::default()
+            };
+            assert!(validate_settings(&settings).is_ok(), "Theme '{}' should be valid", theme);
+        }
+
+        // Invalid theme rejected
+        let settings = AppSettings {
+            theme: Some("nonexistent-theme".to_string()),
+            ..Default::default()
+        };
+        let result = validate_settings(&settings);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid theme: nonexistent-theme"));
+
+        // None theme is valid (uses default)
+        let settings = AppSettings {
+            theme: None,
+            ..Default::default()
+        };
+        assert!(validate_settings(&settings).is_ok());
     }
 }
