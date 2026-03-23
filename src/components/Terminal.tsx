@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { useQuitWarning } from '../hooks/useQuitWarning';
 import { listen } from '@tauri-apps/api/event';
 import { createSession, writeToSession, closeSession, startReading } from '../lib/pty';
 import { SHELL_TYPES, ShellType, Block } from '../lib/types';
@@ -77,6 +78,13 @@ function Terminal({ paneId }: TerminalProps) {
   const completions = useCompletions(input, cursorPos, history, knownCommands, cwd);
   const { visibleIds, observeBlock } = useBlockVisibility();
   const search = useSearch(blocks);
+
+  // Warn on window close if any command is still running
+  const hasRunningProcesses = useMemo(
+    () => blocks.some((b) => b.command !== '' && b.status === 'running'),
+    [blocks],
+  );
+  useQuitWarning(hasRunningProcesses);
 
   const updateSessionId = useCallback((id: string | null) => {
     sessionIdRef.current = id;
