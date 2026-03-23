@@ -359,6 +359,24 @@ html, body, #root {
   pointer-events: none;
 }
 
+/* Cursor shape variants */
+.editor-cursor-bar {
+  width: 2px;
+  height: 1.2em;
+}
+
+.editor-cursor-block {
+  width: 0.6em;
+  height: 1.2em;
+  opacity: 0.5;
+}
+
+.editor-cursor-underline {
+  width: 0.6em;
+  height: 2px;
+  align-self: flex-end;
+}
+
 .editor-cursor-blink {
   animation: cursor-blink 1s step-end infinite;
 }
@@ -422,6 +440,14 @@ html, body, #root {
 .tab-button-active {
   color: var(--text-primary);
   border-bottom-color: var(--accent-blue);
+}
+
+.tab-dragging {
+  opacity: 0.5;
+}
+
+.tab-drop-indicator {
+  border-left: 2px solid var(--accent-blue);
 }
 
 .tab-close {

@@ -110,6 +110,132 @@ describe('TabBar', () => {
     expect(onNewTab).toHaveBeenCalledTimes(1);
   });
 
+  it('test_tab_has_draggable_attribute', () => {
+    const tabs = makeTabs(3);
+    render(
+      <TabBar
+        tabs={tabs}
+        activeTabId="tab-1"
+        onSelectTab={vi.fn()}
+        onCloseTab={vi.fn()}
+        onNewTab={vi.fn()}
+        onReorderTabs={vi.fn()}
+      />,
+    );
+    const tab1 = screen.getByTestId('tab-button-tab-1');
+    const tab2 = screen.getByTestId('tab-button-tab-2');
+    const tab3 = screen.getByTestId('tab-button-tab-3');
+    expect(tab1).toHaveAttribute('draggable', 'true');
+    expect(tab2).toHaveAttribute('draggable', 'true');
+    expect(tab3).toHaveAttribute('draggable', 'true');
+  });
+
+  it('test_drag_start_sets_data', () => {
+    const tabs = makeTabs(2);
+    render(
+      <TabBar
+        tabs={tabs}
+        activeTabId="tab-1"
+        onSelectTab={vi.fn()}
+        onCloseTab={vi.fn()}
+        onNewTab={vi.fn()}
+        onReorderTabs={vi.fn()}
+      />,
+    );
+    const tab1 = screen.getByTestId('tab-button-tab-1');
+    const setData = vi.fn();
+    fireEvent.dragStart(tab1, {
+      dataTransfer: { setData, effectAllowed: '' },
+    });
+    expect(setData).toHaveBeenCalledWith('text/plain', '0');
+  });
+
+  it('test_drop_reorders_tabs', () => {
+    const tabs = makeTabs(3);
+    const onReorderTabs = vi.fn();
+    render(
+      <TabBar
+        tabs={tabs}
+        activeTabId="tab-1"
+        onSelectTab={vi.fn()}
+        onCloseTab={vi.fn()}
+        onNewTab={vi.fn()}
+        onReorderTabs={onReorderTabs}
+      />,
+    );
+    // Drag tab-1 (index 0) and drop on tab-3 (index 2)
+    const tab1 = screen.getByTestId('tab-button-tab-1');
+    const tab3 = screen.getByTestId('tab-button-tab-3');
+    fireEvent.dragStart(tab1, {
+      dataTransfer: { setData: vi.fn(), effectAllowed: '' },
+    });
+    fireEvent.drop(tab3, {
+      dataTransfer: { getData: () => '0' },
+    });
+    expect(onReorderTabs).toHaveBeenCalledWith(0, 2);
+  });
+
+  it('test_active_tab_preserved_after_reorder', () => {
+    const tabs = makeTabs(3);
+    const onReorderTabs = vi.fn();
+    // Active tab is tab-2 (index 1)
+    const { rerender } = render(
+      <TabBar
+        tabs={tabs}
+        activeTabId="tab-2"
+        onSelectTab={vi.fn()}
+        onCloseTab={vi.fn()}
+        onNewTab={vi.fn()}
+        onReorderTabs={onReorderTabs}
+      />,
+    );
+    // Simulate drag tab-1 to position 2
+    const tab1 = screen.getByTestId('tab-button-tab-1');
+    const tab3 = screen.getByTestId('tab-button-tab-3');
+    fireEvent.dragStart(tab1, {
+      dataTransfer: { setData: vi.fn(), effectAllowed: '' },
+    });
+    fireEvent.drop(tab3, {
+      dataTransfer: { getData: () => '0' },
+    });
+    // Simulate the reorder that TabManager would perform
+    const reorderedTabs = [tabs[1], tabs[2], tabs[0]];
+    rerender(
+      <TabBar
+        tabs={reorderedTabs}
+        activeTabId="tab-2"
+        onSelectTab={vi.fn()}
+        onCloseTab={vi.fn()}
+        onNewTab={vi.fn()}
+        onReorderTabs={onReorderTabs}
+      />,
+    );
+    // Active tab (tab-2) should still be highlighted
+    const activeBtn = screen.getByTestId('tab-button-tab-2');
+    expect(activeBtn).toHaveClass('tab-button-active');
+  });
+
+  it('test_dragging_tab_has_opacity', () => {
+    const tabs = makeTabs(2);
+    render(
+      <TabBar
+        tabs={tabs}
+        activeTabId="tab-1"
+        onSelectTab={vi.fn()}
+        onCloseTab={vi.fn()}
+        onNewTab={vi.fn()}
+        onReorderTabs={vi.fn()}
+      />,
+    );
+    const tab1 = screen.getByTestId('tab-button-tab-1');
+    fireEvent.dragStart(tab1, {
+      dataTransfer: { setData: vi.fn(), effectAllowed: '' },
+    });
+    expect(tab1).toHaveClass('tab-dragging');
+    fireEvent.dragEnd(tab1);
+    expect(tab1).not.toHaveClass('tab-dragging');
+  });
+
   it('test_TabBar_has_settings_button', () => {
     const tabs = makeTabs(1);
     const onOpenSettings = vi.fn();

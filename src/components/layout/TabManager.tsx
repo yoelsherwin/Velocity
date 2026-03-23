@@ -297,6 +297,21 @@ function TabManager() {
     [],
   );
 
+  const handleReorderTabs = useCallback(
+    (fromIndex: number, toIndex: number) => {
+      setTabs((prev) => {
+        if (fromIndex < 0 || fromIndex >= prev.length) return prev;
+        if (toIndex < 0 || toIndex >= prev.length) return prev;
+        if (fromIndex === toIndex) return prev;
+        const newTabs = [...prev];
+        const [moved] = newTabs.splice(fromIndex, 1);
+        newTabs.splice(toIndex, 0, moved);
+        return newTabs;
+      });
+    },
+    [],
+  );
+
   // When switching tabs, just update activeTabId — focusedPaneId is per-tab
   const handleSelectTab = useCallback(
     (tabId: string) => {
@@ -444,6 +459,7 @@ function TabManager() {
           onCloseTab={handleCloseTab}
           onNewTab={handleNewTab}
           onOpenSettings={() => setSettingsOpen(true)}
+          onReorderTabs={handleReorderTabs}
         />
         <div className="tab-content">
           {tabs.map((tab) => (
