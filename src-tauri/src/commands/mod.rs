@@ -150,6 +150,35 @@ pub async fn translate_command(
     Ok(response.command)
 }
 
+#[derive(Serialize, Clone, Debug)]
+pub struct FixSuggestion {
+    pub suggested_command: String,
+    pub explanation: String,
+}
+
+#[tauri::command]
+pub async fn suggest_fix(
+    command: String,
+    exit_code: i32,
+    error_output: String,
+    shell_type: String,
+    cwd: String,
+) -> Result<FixSuggestion, String> {
+    let settings = settings::load_settings()?;
+    let request = llm::FixRequest {
+        command,
+        exit_code,
+        error_output,
+        shell_type,
+        cwd,
+    };
+    let response = llm::suggest_fix(&settings, &request).await?;
+    Ok(FixSuggestion {
+        suggested_command: response.suggested_command,
+        explanation: response.explanation,
+    })
+}
+
 #[tauri::command]
 pub async fn classify_intent_llm(
     input: String,

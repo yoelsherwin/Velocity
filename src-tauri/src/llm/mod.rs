@@ -404,6 +404,338 @@ async fn call_azure_classification(
         .ok_or_else(|| "Failed to extract response from Azure".to_string())
 }
 
+/// Maximum number of characters of error output to send to the LLM.
+const MAX_ERROR_OUTPUT_CHARS: usize = 2000;
+
+/// A request to suggest a fix for a failed command.
+pub struct FixRequest {
+    pub command: String,
+    pub exit_code: i32,
+    pub error_output: String, // Last 2000 chars of output
+    pub shell_type: String,
+    pub cwd: String,
+}
+
+/// The result of a successful fix suggestion.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct FixResponse {
+    pub suggested_command: String,
+    pub explanation: String,
+}
+
+/// Truncates error output to the last MAX_ERROR_OUTPUT_CHARS characters.
+fn truncate_error_output(output: &str) -> &str {
+    if output.len() <= MAX_ERROR_OUTPUT_CHARS {
+        output
+    } else {
+        &output[output.len() - MAX_ERROR_OUTPUT_CHARS..]
+    }
+}
+
+/// Builds the system prompt for fix suggestion.
+fn build_fix_prompt(shell_type: &str, cwd: &str) -> String {
+    format!(
+        r#"You are a shell command error analyzer. The user ran a command that failed.
+Analyze the error and suggest a corrected command.
+
+Rules:
+- Output a JSON object with "command" and "explanation" fields
+- "command": the corrected shell command to try
+- "explanation": one sentence explaining what went wrong (max 100 chars)
+- Target shell: {} on Windows
+- Current directory: {}
+- If you cannot determine a fix, set command to "" and explain why"#,
+        shell_type, cwd
+    )
+}
+
+/// Builds the user message for fix suggestion from a FixRequest.
+fn build_fix_user_message(request: &FixRequest) -> String {
+    let truncated_output = truncate_error_output(&request.error_output);
+    format!(
+        "Command: {}\nExit code: {}\nError output:\n{}",
+        request.command, request.exit_code, truncated_output
+    )
+}
+
+/// Parses a fix suggestion response from the LLM.
+/// Handles JSON extraction, including stripping markdown code fences.
+fn parse_fix_response(raw: &str) -> FixResponse {
+    let cleaned = clean_response(raw);
+
+    // Try to parse as JSON
+    if let Ok(value) = serde_json::from_str::<serde_json::Value>(&cleaned) {
+        let command = value["command"]
+            .as_str()
+            .unwrap_or("")
+            .to_string();
+        let explanation = value["explanation"]
+            .as_str()
+            .unwrap_or("")
+            .to_string();
+        return FixResponse {
+            suggested_command: command,
+            explanation,
+        };
+    }
+
+    // Malformed response: return empty suggestion
+    FixResponse {
+        suggested_command: String::new(),
+        explanation: "Could not parse LLM response".to_string(),
+    }
+}
+
+/// Suggests a fix for a failed command using the configured LLM provider.
+pub async fn suggest_fix(
+    settings: &AppSettings,
+    request: &FixRequest,
+) -> Result<FixResponse, String> {
+    if settings.api_key.is_empty() {
+        return Err("No API key configured. Open Settings to add one.".to_string());
+    }
+
+    let system_prompt = build_fix_prompt(&request.shell_type, &request.cwd);
+    let user_message = build_fix_user_message(request);
+
+    let raw_response = match settings.llm_provider.as_str() {
+        "openai" => {
+            call_openai_fix(&settings.api_key, &settings.model, &system_prompt, &user_message).await
+        }
+        "anthropic" => {
+            call_anthropic_fix(&settings.api_key, &settings.model, &system_prompt, &user_message).await
+        }
+        "google" => {
+            call_google_fix(&settings.api_key, &settings.model, &system_prompt, &user_message).await
+        }
+        "azure" => {
+            call_azure_fix(
+                &settings.api_key,
+                &settings.model,
+                settings.azure_endpoint.as_deref(),
+                &system_prompt,
+                &user_message,
+            )
+            .await
+        }
+        _ => Err(format!("Unknown provider: {}", settings.llm_provider)),
+    }?;
+
+    Ok(parse_fix_response(&raw_response))
+}
+
+/// Calls the OpenAI Chat Completions API for fix suggestions (temperature 0.3, max_tokens 200).
+async fn call_openai_fix(
+    api_key: &str,
+    model: &str,
+    system_prompt: &str,
+    user_message: &str,
+) -> Result<String, String> {
+    let body = serde_json::json!({
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_message}
+        ],
+        "temperature": 0.3,
+        "max_tokens": 200
+    });
+
+    let response = http_client()
+        .post("https://api.openai.com/v1/chat/completions")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| sanitize_error(&format!("HTTP request failed: {}", e), api_key))?;
+
+    let status = response.status();
+    let json: Value = response
+        .json()
+        .await
+        .map_err(|e| sanitize_error(&format!("Failed to parse response: {}", e), api_key))?;
+
+    if !status.is_success() {
+        let error_msg = json["error"]["message"]
+            .as_str()
+            .unwrap_or("Unknown API error");
+        return Err(sanitize_error(
+            &format!("OpenAI API error ({}): {}", status, error_msg),
+            api_key,
+        ));
+    }
+
+    json["choices"][0]["message"]["content"]
+        .as_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| "Failed to extract response from OpenAI".to_string())
+}
+
+/// Calls the Anthropic Messages API for fix suggestions.
+async fn call_anthropic_fix(
+    api_key: &str,
+    model: &str,
+    system_prompt: &str,
+    user_message: &str,
+) -> Result<String, String> {
+    let body = serde_json::json!({
+        "model": model,
+        "system": system_prompt,
+        "messages": [{"role": "user", "content": user_message}],
+        "max_tokens": 200,
+        "temperature": 0.3
+    });
+
+    let response = http_client()
+        .post("https://api.anthropic.com/v1/messages")
+        .header("x-api-key", api_key)
+        .header("anthropic-version", "2023-06-01")
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| sanitize_error(&format!("HTTP request failed: {}", e), api_key))?;
+
+    let status = response.status();
+    let json: Value = response
+        .json()
+        .await
+        .map_err(|e| sanitize_error(&format!("Failed to parse response: {}", e), api_key))?;
+
+    if !status.is_success() {
+        let error_msg = json["error"]["message"]
+            .as_str()
+            .unwrap_or("Unknown API error");
+        return Err(sanitize_error(
+            &format!("Anthropic API error ({}): {}", status, error_msg),
+            api_key,
+        ));
+    }
+
+    json["content"][0]["text"]
+        .as_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| "Failed to extract response from Anthropic".to_string())
+}
+
+/// Calls the Google Gemini API for fix suggestions.
+async fn call_google_fix(
+    api_key: &str,
+    model: &str,
+    system_prompt: &str,
+    user_message: &str,
+) -> Result<String, String> {
+    validate_model_for_url(model)?;
+    let encoded_model = url_encode(model);
+    let url = format!(
+        "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}",
+        encoded_model, api_key
+    );
+
+    let body = serde_json::json!({
+        "systemInstruction": {"parts": [{"text": system_prompt}]},
+        "contents": [{"parts": [{"text": user_message}]}],
+        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 200}
+    });
+
+    let response = http_client()
+        .post(&url)
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| sanitize_error(&format!("HTTP request failed: {}", e), api_key))?;
+
+    let status = response.status();
+    let json: Value = response
+        .json()
+        .await
+        .map_err(|e| sanitize_error(&format!("Failed to parse response: {}", e), api_key))?;
+
+    if !status.is_success() {
+        let error_msg = json["error"]["message"]
+            .as_str()
+            .unwrap_or("Unknown API error");
+        return Err(sanitize_error(
+            &format!("Google API error ({}): {}", status, error_msg),
+            api_key,
+        ));
+    }
+
+    json["candidates"][0]["content"]["parts"][0]["text"]
+        .as_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| "Failed to extract response from Google".to_string())
+}
+
+/// Calls the Azure OpenAI API for fix suggestions.
+async fn call_azure_fix(
+    api_key: &str,
+    model: &str,
+    endpoint: Option<&str>,
+    system_prompt: &str,
+    user_message: &str,
+) -> Result<String, String> {
+    let endpoint = endpoint.ok_or("Azure endpoint is required. Open Settings to configure it.")?;
+
+    if !endpoint.starts_with("https://") {
+        return Err("Azure endpoint must use HTTPS.".to_string());
+    }
+
+    if endpoint.contains('?') || endpoint.contains('#') {
+        return Err("Azure endpoint must not contain query parameters or fragments".to_string());
+    }
+
+    validate_model_for_url(model)?;
+    let encoded_model = url_encode(model);
+    let url = format!(
+        "{}/openai/deployments/{}/chat/completions?api-version=2024-02-01",
+        endpoint.trim_end_matches('/'),
+        encoded_model
+    );
+
+    let body = serde_json::json!({
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_message}
+        ],
+        "temperature": 0.3,
+        "max_tokens": 200
+    });
+
+    let response = http_client()
+        .post(&url)
+        .header("api-key", api_key)
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| sanitize_error(&format!("HTTP request failed: {}", e), api_key))?;
+
+    let status = response.status();
+    let json: Value = response
+        .json()
+        .await
+        .map_err(|e| sanitize_error(&format!("Failed to parse response: {}", e), api_key))?;
+
+    if !status.is_success() {
+        let error_msg = json["error"]["message"]
+            .as_str()
+            .unwrap_or("Unknown API error");
+        return Err(sanitize_error(
+            &format!("Azure API error ({}): {}", status, error_msg),
+            api_key,
+        ));
+    }
+
+    json["choices"][0]["message"]["content"]
+        .as_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| "Failed to extract response from Azure".to_string())
+}
+
 /// Translates a natural language prompt into a shell command using the configured LLM provider.
 pub async fn translate_command(
     settings: &AppSettings,
@@ -951,5 +1283,92 @@ mod tests {
         assert!(prompt.contains("cmd0"), "Prompt should contain first commands");
         assert!(prompt.contains("cmd9"), "Prompt should contain up to 10th command");
         assert!(!prompt.contains("cmd10"), "Prompt should not contain 11th+ commands");
+    }
+
+    // --- Fix suggestion tests ---
+
+    #[test]
+    fn test_fix_suggestion_prompt_includes_context() {
+        let prompt = build_fix_prompt("powershell", "C:\\Projects");
+        assert!(prompt.contains("powershell"), "Fix prompt should contain shell type");
+        assert!(prompt.contains("C:\\Projects"), "Fix prompt should contain CWD");
+        assert!(prompt.contains("command"), "Fix prompt should mention command field");
+        assert!(prompt.contains("explanation"), "Fix prompt should mention explanation field");
+    }
+
+    #[test]
+    fn test_fix_response_parsing_valid() {
+        let raw = r#"{"command": "git push --set-upstream origin main", "explanation": "No upstream branch was set"}"#;
+        let response = parse_fix_response(raw);
+        assert_eq!(response.suggested_command, "git push --set-upstream origin main");
+        assert_eq!(response.explanation, "No upstream branch was set");
+    }
+
+    #[test]
+    fn test_fix_response_parsing_invalid() {
+        let raw = "This is not valid JSON at all";
+        let response = parse_fix_response(raw);
+        assert!(response.suggested_command.is_empty(), "Invalid JSON should result in empty command");
+        assert!(!response.explanation.is_empty(), "Invalid JSON should have an explanation");
+    }
+
+    #[test]
+    fn test_fix_response_strips_markdown() {
+        let raw = "```json\n{\"command\": \"npm install\", \"explanation\": \"Missing dependencies\"}\n```";
+        let response = parse_fix_response(raw);
+        assert_eq!(response.suggested_command, "npm install");
+        assert_eq!(response.explanation, "Missing dependencies");
+    }
+
+    #[test]
+    fn test_error_output_truncated() {
+        let long_output = "x".repeat(5000);
+        let truncated = truncate_error_output(&long_output);
+        assert_eq!(truncated.len(), MAX_ERROR_OUTPUT_CHARS, "Should truncate to MAX_ERROR_OUTPUT_CHARS");
+        // Should keep the LAST 2000 chars
+        assert!(truncated.chars().all(|c| c == 'x'));
+    }
+
+    #[test]
+    fn test_error_output_short_not_truncated() {
+        let short_output = "error: file not found";
+        let truncated = truncate_error_output(short_output);
+        assert_eq!(truncated, short_output, "Short output should not be truncated");
+    }
+
+    #[test]
+    fn test_fix_user_message_contains_context() {
+        let request = FixRequest {
+            command: "git push".to_string(),
+            exit_code: 1,
+            error_output: "fatal: no upstream branch".to_string(),
+            shell_type: "powershell".to_string(),
+            cwd: "C:\\Projects".to_string(),
+        };
+        let message = build_fix_user_message(&request);
+        assert!(message.contains("git push"), "User message should contain command");
+        assert!(message.contains("1"), "User message should contain exit code");
+        assert!(message.contains("fatal: no upstream branch"), "User message should contain error output");
+    }
+
+    #[tokio::test]
+    async fn test_suggest_fix_fails_without_api_key() {
+        let settings = AppSettings {
+            llm_provider: "openai".to_string(),
+            api_key: String::new(),
+            model: "gpt-4o-mini".to_string(),
+            azure_endpoint: None,
+            ..Default::default()
+        };
+        let request = FixRequest {
+            command: "git push".to_string(),
+            exit_code: 1,
+            error_output: "error".to_string(),
+            shell_type: "powershell".to_string(),
+            cwd: "C:\\".to_string(),
+        };
+        let result = suggest_fix(&settings, &request).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("No API key"));
     }
 }

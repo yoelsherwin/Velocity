@@ -6,6 +6,7 @@ import { SHELL_TYPES, ShellType, Block } from '../lib/types';
 import { extractExitCode, getExitCodeMarker } from '../lib/exit-code-parser';
 import { classifyIntent, stripHashPrefix, ClassificationResult } from '../lib/intent-classifier';
 import { translateCommand, classifyIntentLLM } from '../lib/llm';
+import { getSettings } from '../lib/settings';
 import { getCwd } from '../lib/cwd';
 import { getGitInfo, type GitInfo } from '../lib/git';
 import { stripAnsi } from '../lib/ansi';
@@ -86,6 +87,18 @@ function Terminal({ paneId }: TerminalProps) {
   const search = useSearch(blocks);
   const [historySearchOpen, setHistorySearchOpen] = useState(false);
   const savedInputRef = useRef('');
+  const [hasApiKey, setHasApiKey] = useState(false);
+
+  // Determine the most recently failed block (for error suggestion)
+  const mostRecentFailedBlockId = useMemo(() => {
+    for (let i = blocks.length - 1; i >= 0; i--) {
+      const b = blocks[i];
+      if (b.command && b.status === 'completed' && b.exitCode != null && b.exitCode !== 0) {
+        return b.id;
+      }
+    }
+    return null;
+  }, [blocks]);
 
   // Warn on window close if any command is still running
   const hasRunningProcesses = useMemo(
@@ -408,6 +421,15 @@ function Terminal({ paneId }: TerminalProps) {
     }).catch(() => {});
   }, []);
 
+  // Check if API key is configured (for error suggestion feature)
+  useEffect(() => {
+    getSettings()
+      .then((settings) => {
+        setHasApiKey(!!settings.api_key);
+      })
+      .catch(() => setHasApiKey(false));
+  }, []);
+
   // Auto-scroll to bottom when blocks update
   useEffect(() => {
     if (outputRef.current) {
@@ -491,6 +513,13 @@ function Terminal({ paneId }: TerminalProps) {
       submitCommand(command);
     },
     [submitCommand],
+  );
+
+  const handleUseFix = useCallback(
+    (command: string) => {
+      setInput(command);
+    },
+    [],
   );
 
   const toggleBlockCollapse = useCallback((blockId: string) => {
@@ -1014,9 +1043,14 @@ function Terminal({ paneId }: TerminalProps) {
                 isCollapsed={isCollapsed}
                 onToggleCollapse={() => toggleBlockCollapse(block.id)}
                 onRerun={handleRerun}
+                onUseFix={handleUseFix}
                 isVisible={visibleIds.has(block.id)}
                 observeRef={(el) => observeBlock(block.id, el)}
                 highlights={blockHighlights.get(block.id)}
+                shellType={shellType}
+                cwd={cwd}
+                hasApiKey={hasApiKey}
+                isMostRecentFailed={block.id === mostRecentFailedBlockId}
               />
             );
           })}

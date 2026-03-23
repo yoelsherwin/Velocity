@@ -21,6 +21,40 @@ export async function translateCommand(
 }
 
 /**
+ * The response from the suggest_fix command.
+ */
+export interface FixSuggestion {
+  suggested_command: string;
+  explanation: string;
+}
+
+/**
+ * Suggests a fix for a failed command using the configured LLM provider.
+ * Returns a suggested command and explanation, or throws if unavailable.
+ *
+ * @param command - The failed command
+ * @param exitCode - The non-zero exit code
+ * @param errorOutput - The error output (will be truncated to last 2000 chars on backend)
+ * @param shellType - The target shell: "powershell", "cmd", or "wsl"
+ * @param cwd - The current working directory
+ */
+export async function suggestFix(
+  command: string,
+  exitCode: number,
+  errorOutput: string,
+  shellType: string,
+  cwd: string,
+): Promise<FixSuggestion> {
+  return invoke<FixSuggestion>('suggest_fix', {
+    command,
+    exitCode,
+    errorOutput,
+    shellType,
+    cwd,
+  });
+}
+
+/**
  * Classifies ambiguous user input as CLI or natural language using the configured LLM provider.
  * Only called on submit (Enter) when the heuristic classifier has low confidence.
  *

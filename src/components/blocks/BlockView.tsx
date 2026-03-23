@@ -3,6 +3,7 @@ import { Block } from '../../lib/types';
 import { stripAnsi } from '../../lib/ansi';
 import AnsiOutput, { HighlightRange } from '../AnsiOutput';
 import { estimateBlockHeight } from '../../hooks/useBlockVisibility';
+import ErrorSuggestion from './ErrorSuggestion';
 
 interface BlockViewProps {
   block: Block;
@@ -11,12 +12,17 @@ interface BlockViewProps {
   isCollapsed?: boolean;    // true if this block's output is collapsed
   onToggleCollapse?: () => void;  // callback to toggle collapse state
   onRerun: (command: string) => void;
+  onUseFix?: (command: string) => void;  // callback when user accepts a fix suggestion
   isVisible?: boolean;      // true if block is in or near the viewport
   observeRef?: (el: HTMLDivElement | null) => void;  // callback ref for IntersectionObserver
   highlights?: HighlightRange[];  // search match highlights for this block
+  shellType?: string;       // shell type for error suggestion context
+  cwd?: string;             // current working directory for error suggestion context
+  hasApiKey?: boolean;      // whether an API key is configured
+  isMostRecentFailed?: boolean;  // whether this is the most recently failed block
 }
 
-function BlockView({ block, isActive, isFocused = false, isCollapsed = false, onToggleCollapse, onRerun, isVisible = true, observeRef, highlights }: BlockViewProps) {
+function BlockView({ block, isActive, isFocused = false, isCollapsed = false, onToggleCollapse, onRerun, onUseFix, isVisible = true, observeRef, highlights, shellType, cwd, hasApiKey = false, isMostRecentFailed = false }: BlockViewProps) {
   const formattedTime = useMemo(() => {
     return new Date(block.timestamp).toLocaleTimeString();
   }, [block.timestamp]);
@@ -107,6 +113,17 @@ function BlockView({ block, isActive, isFocused = false, isCollapsed = false, on
             Copy Output
           </button>
         </div>
+      )}
+      {!isCollapsed && isMostRecentFailed && block.exitCode != null && block.exitCode !== 0 && block.status === 'completed' && onUseFix && (
+        <ErrorSuggestion
+          command={block.command}
+          exitCode={block.exitCode}
+          output={block.output}
+          shellType={shellType || block.shellType}
+          cwd={cwd || 'C:\\'}
+          hasApiKey={hasApiKey}
+          onUseFix={onUseFix}
+        />
       )}
     </div>
   );
