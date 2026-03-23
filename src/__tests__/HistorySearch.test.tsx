@@ -2,9 +2,20 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 
 import HistorySearch from '../components/HistorySearch';
+import { HistoryEntry } from '../hooks/useCommandHistory';
+
+function makeEntry(command: string, extra?: Partial<HistoryEntry>): HistoryEntry {
+  return { command, timestamp: Date.now(), shellType: 'powershell', ...extra };
+}
 
 const defaultProps = {
-  history: ['ls', 'git commit -m "init"', 'git push', 'npm test', 'git status'],
+  history: [
+    makeEntry('ls'),
+    makeEntry('git commit -m "init"'),
+    makeEntry('git push'),
+    makeEntry('npm test'),
+    makeEntry('git status'),
+  ],
   isOpen: true,
   onAccept: vi.fn(),
   onCancel: vi.fn(),

@@ -1,25 +1,31 @@
 import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
-import { useCommandHistory } from '../hooks/useCommandHistory';
+import { useCommandHistory, HistoryEntry } from '../hooks/useCommandHistory';
+
+function makeEntry(command: string): HistoryEntry {
+  return { command, timestamp: Date.now(), shellType: 'powershell' };
+}
 
 describe('useCommandHistory', () => {
   it('test_addCommand_stores_in_history', () => {
     const { result } = renderHook(() => useCommandHistory());
 
     act(() => {
-      result.current.addCommand('ls');
-      result.current.addCommand('pwd');
+      result.current.addCommand(makeEntry('ls'));
+      result.current.addCommand(makeEntry('pwd'));
     });
 
-    expect(result.current.history).toEqual(['ls', 'pwd']);
+    expect(result.current.history).toHaveLength(2);
+    expect(result.current.history[0].command).toBe('ls');
+    expect(result.current.history[1].command).toBe('pwd');
   });
 
   it('test_navigateUp_returns_most_recent', () => {
     const { result } = renderHook(() => useCommandHistory());
 
     act(() => {
-      result.current.addCommand('ls');
-      result.current.addCommand('pwd');
+      result.current.addCommand(makeEntry('ls'));
+      result.current.addCommand(makeEntry('pwd'));
     });
 
     let value: string | null = null;
@@ -34,8 +40,8 @@ describe('useCommandHistory', () => {
     const { result } = renderHook(() => useCommandHistory());
 
     act(() => {
-      result.current.addCommand('ls');
-      result.current.addCommand('pwd');
+      result.current.addCommand(makeEntry('ls'));
+      result.current.addCommand(makeEntry('pwd'));
     });
 
     let value: string | null = null;
@@ -53,7 +59,7 @@ describe('useCommandHistory', () => {
     const { result } = renderHook(() => useCommandHistory());
 
     act(() => {
-      result.current.addCommand('ls');
+      result.current.addCommand(makeEntry('ls'));
     });
 
     let value: string | null = null;
@@ -71,8 +77,8 @@ describe('useCommandHistory', () => {
     const { result } = renderHook(() => useCommandHistory());
 
     act(() => {
-      result.current.addCommand('ls');
-      result.current.addCommand('pwd');
+      result.current.addCommand(makeEntry('ls'));
+      result.current.addCommand(makeEntry('pwd'));
     });
 
     act(() => {
@@ -94,7 +100,7 @@ describe('useCommandHistory', () => {
     const { result } = renderHook(() => useCommandHistory());
 
     act(() => {
-      result.current.addCommand('ls');
+      result.current.addCommand(makeEntry('ls'));
     });
 
     act(() => {
@@ -117,7 +123,7 @@ describe('useCommandHistory', () => {
     const { result } = renderHook(() => useCommandHistory());
 
     act(() => {
-      result.current.addCommand('ls');
+      result.current.addCommand(makeEntry('ls'));
     });
 
     act(() => {
@@ -140,8 +146,8 @@ describe('useCommandHistory', () => {
     const { result } = renderHook(() => useCommandHistory());
 
     act(() => {
-      result.current.addCommand('ls');
-      result.current.addCommand('ls');
+      result.current.addCommand(makeEntry('ls'));
+      result.current.addCommand(makeEntry('ls'));
     });
 
     expect(result.current.history).toHaveLength(1);
@@ -151,15 +157,15 @@ describe('useCommandHistory', () => {
     const { result } = renderHook(() => useCommandHistory(3));
 
     act(() => {
-      result.current.addCommand('a');
-      result.current.addCommand('b');
-      result.current.addCommand('c');
-      result.current.addCommand('d');
-      result.current.addCommand('e');
+      result.current.addCommand(makeEntry('a'));
+      result.current.addCommand(makeEntry('b'));
+      result.current.addCommand(makeEntry('c'));
+      result.current.addCommand(makeEntry('d'));
+      result.current.addCommand(makeEntry('e'));
     });
 
     expect(result.current.history).toHaveLength(3);
     // Oldest should be dropped
-    expect(result.current.history).toEqual(['c', 'd', 'e']);
+    expect(result.current.history.map((e) => e.command)).toEqual(['c', 'd', 'e']);
   });
 });

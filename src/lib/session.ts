@@ -1,11 +1,12 @@
 import { invoke } from '@tauri-apps/api/core';
 import { ShellType, PaneNode } from './types';
+import { HistoryEntry } from '../hooks/useCommandHistory';
 
 export interface SavedPane {
   id: string;
   shellType: ShellType;
   cwd: string;
-  history: string[];
+  history: (string | HistoryEntry)[];
 }
 
 export interface SavedTab {

@@ -1,8 +1,17 @@
 import { useState, useCallback, useRef } from 'react';
 
+export interface HistoryEntry {
+  command: string;
+  timestamp: number;
+  exitCode?: number;
+  cwd?: string;
+  gitBranch?: string;
+  shellType: string;
+}
+
 interface UseCommandHistory {
-  history: string[];
-  addCommand: (command: string) => void;
+  history: HistoryEntry[];
+  addCommand: (entry: HistoryEntry) => void;
   navigateUp: () => string | null;
   navigateDown: () => string | null;
   reset: () => void;
@@ -12,15 +21,31 @@ interface UseCommandHistory {
 
 const DEFAULT_MAX_HISTORY = 100;
 
+/**
+ * Normalize initial history: accepts either string[] (backward compat) or HistoryEntry[].
+ */
+function normalizeHistory(initial: (string | HistoryEntry)[]): HistoryEntry[] {
+  return initial.map((item) => {
+    if (typeof item === 'string') {
+      return {
+        command: item,
+        timestamp: Date.now(),
+        shellType: 'powershell',
+      };
+    }
+    return item;
+  });
+}
+
 export function useCommandHistory(
   maxHistory: number = DEFAULT_MAX_HISTORY,
-  initialHistory: string[] = [],
+  initialHistory: (string | HistoryEntry)[] = [],
 ): UseCommandHistory {
-  const [history, setHistory] = useState<string[]>(initialHistory);
+  const [history, setHistory] = useState<HistoryEntry[]>(() => normalizeHistory(initialHistory));
   const [draft, setDraft] = useState('');
   const indexRef = useRef<number | null>(null);
   // Keep a ref mirror of history for synchronous access in navigateUp/Down
-  const historyRef = useRef<string[]>(initialHistory);
+  const historyRef = useRef<HistoryEntry[]>(normalizeHistory(initialHistory));
   const draftRef = useRef('');
 
   // Sync draft ref
@@ -30,13 +55,16 @@ export function useCommandHistory(
   }, []);
 
   const addCommand = useCallback(
-    (command: string) => {
+    (entry: HistoryEntry) => {
       setHistory((prev) => {
-        // Skip duplicate if same as last command
-        if (prev.length > 0 && prev[prev.length - 1] === command) {
-          return prev;
+        // If same as last command, update the existing entry with new metadata
+        if (prev.length > 0 && prev[prev.length - 1].command === entry.command) {
+          const updated = [...prev];
+          updated[updated.length - 1] = { ...updated[updated.length - 1], ...entry };
+          historyRef.current = updated;
+          return updated;
         }
-        const next = [...prev, command];
+        const next = [...prev, entry];
         // Enforce maxHistory
         const trimmed = next.length > maxHistory ? next.slice(-maxHistory) : next;
         historyRef.current = trimmed;
@@ -59,7 +87,7 @@ export function useCommandHistory(
       // First Up press: save current draft, go to most recent
       const newIndex = hist.length - 1;
       indexRef.current = newIndex;
-      return hist[newIndex];
+      return hist[newIndex].command;
     }
 
     if (currentIndex <= 0) {
@@ -69,7 +97,7 @@ export function useCommandHistory(
 
     const newIndex = currentIndex - 1;
     indexRef.current = newIndex;
-    return hist[newIndex];
+    return hist[newIndex].command;
   }, []);
 
   const navigateDown = useCallback((): string | null => {
@@ -89,7 +117,7 @@ export function useCommandHistory(
 
     const newIndex = currentIndex + 1;
     indexRef.current = newIndex;
-    return hist[newIndex];
+    return hist[newIndex].command;
   }, []);
 
   const reset = useCallback(() => {

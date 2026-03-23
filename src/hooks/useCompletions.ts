@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { getCompletionContext } from '../lib/completion-context';
+import { HistoryEntry } from './useCommandHistory';
 
 export interface UseCompletionsResult {
   suggestion: string | null;        // Ghost text to display (same interface as before)
@@ -22,7 +23,7 @@ export interface UseCompletionsResult {
 export function useCompletions(
   input: string,
   cursorPos: number,
-  history: string[],
+  history: HistoryEntry[],
   knownCommands: Set<string>,
   cwd: string,
 ): UseCompletionsResult {
@@ -49,7 +50,7 @@ export function useCompletions(
     if (input.includes('\n')) return null;
 
     for (let i = history.length - 1; i >= 0; i--) {
-      const cmd = history[i];
+      const cmd = history[i].command;
       if (cmd.startsWith(input) && cmd !== input) {
         return cmd.slice(input.length);
       }

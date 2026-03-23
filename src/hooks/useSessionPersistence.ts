@@ -2,13 +2,14 @@ import { useCallback, useRef } from 'react';
 import { Tab } from '../lib/types';
 import { saveSessionState, SessionState, SavedPane } from '../lib/session';
 import { getLeafIds } from '../lib/pane-utils';
+import { HistoryEntry } from './useCommandHistory';
 
 const DEBOUNCE_MS = 2000;
 
 export interface PaneSessionData {
   shellType: string;
   cwd: string;
-  history: string[];
+  history: (string | HistoryEntry)[];
 }
 
 export interface UseSessionPersistence {

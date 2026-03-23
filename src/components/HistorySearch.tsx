@@ -1,22 +1,23 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { HistoryEntry } from '../hooks/useCommandHistory';
 
 interface HistorySearchProps {
-  history: string[];
+  history: HistoryEntry[];
   isOpen: boolean;
   onAccept: (command: string) => void;
   onCancel: () => void;
 }
 
 /**
- * Finds all indices in `history` where the entry contains `query` (case-insensitive).
+ * Finds all indices in `history` where the entry's command contains `query` (case-insensitive).
  * Returns indices sorted from most recent (highest index) to oldest (lowest index).
  */
-function findMatches(history: string[], query: string): number[] {
+function findMatches(history: HistoryEntry[], query: string): number[] {
   if (!query) return [];
   const lowerQuery = query.toLowerCase();
   const matches: number[] = [];
   for (let i = history.length - 1; i >= 0; i--) {
-    if (history[i].toLowerCase().includes(lowerQuery)) {
+    if (history[i].command.toLowerCase().includes(lowerQuery)) {
       matches.push(i);
     }
   }
@@ -69,7 +70,7 @@ function HistorySearch({ history, isOpen, onAccept, onCancel }: HistorySearchPro
 
   const matches = useMemo(() => findMatches(history, query), [history, query]);
 
-  const currentMatch = matches.length > 0 ? history[matches[matchIndex]] : null;
+  const currentMatchEntry = matches.length > 0 ? history[matches[matchIndex]] : null;
 
   const handleQueryChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setQuery(e.target.value);
@@ -83,8 +84,8 @@ function HistorySearch({ history, isOpen, onAccept, onCancel }: HistorySearchPro
         onCancel();
       } else if (e.key === 'Enter') {
         e.preventDefault();
-        if (currentMatch !== null) {
-          onAccept(currentMatch);
+        if (currentMatchEntry !== null) {
+          onAccept(currentMatchEntry.command);
         }
       } else if (e.key === 'r' && e.ctrlKey) {
         e.preventDefault();
@@ -94,7 +95,7 @@ function HistorySearch({ history, isOpen, onAccept, onCancel }: HistorySearchPro
         }
       }
     },
-    [onCancel, onAccept, currentMatch, matches.length],
+    [onCancel, onAccept, currentMatchEntry, matches.length],
   );
 
   if (!isOpen) return null;
@@ -119,9 +120,22 @@ function HistorySearch({ history, isOpen, onAccept, onCancel }: HistorySearchPro
             No matching history
           </span>
         )}
-        {currentMatch !== null && (
+        {currentMatchEntry !== null && (
           <span className="history-search-match-text" data-testid="history-search-match">
-            <HighlightedMatch command={currentMatch} query={query} />
+            <HighlightedMatch command={currentMatchEntry.command} query={query} />
+            {currentMatchEntry.cwd && (
+              <span className="history-search-meta" data-testid="history-search-meta-cwd">
+                {' '}in {currentMatchEntry.cwd}
+              </span>
+            )}
+            {currentMatchEntry.exitCode !== undefined && (
+              <span
+                className={`history-search-meta ${currentMatchEntry.exitCode === 0 ? 'exit-success' : 'exit-failure'}`}
+                data-testid="history-search-meta-exit"
+              >
+                {' '}[{currentMatchEntry.exitCode === 0 ? '\u2713' : `\u2717 ${currentMatchEntry.exitCode}`}]
+              </span>
+            )}
           </span>
         )}
       </div>

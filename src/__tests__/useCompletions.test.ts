@@ -1,5 +1,6 @@
 import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { HistoryEntry } from '../hooks/useCommandHistory';
 
 const mockInvoke = vi.fn();
 
@@ -8,6 +9,10 @@ vi.mock('@tauri-apps/api/core', () => ({
 }));
 
 import { useCompletions } from '../hooks/useCompletions';
+
+function makeEntry(command: string): HistoryEntry {
+  return { command, timestamp: Date.now(), shellType: 'powershell' };
+}
 
 describe('useCompletions', () => {
   beforeEach(() => {
@@ -18,14 +23,14 @@ describe('useCompletions', () => {
   it('test_history_suggestion_takes_priority', () => {
     // History match shown as ghost text before any Tab press
     const { result } = renderHook(() =>
-      useCompletions('git co', 6, ['git commit -m fix'], new Set(['git']), 'C:\\'),
+      useCompletions('git co', 6, [makeEntry('git commit -m fix')], new Set(['git']), 'C:\\'),
     );
     expect(result.current.suggestion).toBe('mmit -m fix');
   });
 
   it('test_tab_accepts_history_suggestion', () => {
     const { result } = renderHook(() =>
-      useCompletions('git co', 6, ['git commit -m fix'], new Set(['git']), 'C:\\'),
+      useCompletions('git co', 6, [makeEntry('git commit -m fix')], new Set(['git']), 'C:\\'),
     );
     // History suggestion exists
     expect(result.current.suggestion).toBe('mmit -m fix');

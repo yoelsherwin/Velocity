@@ -20,7 +20,7 @@ import InputEditor from './editor/InputEditor';
 import TerminalGrid, { GridRow, GridUpdatePayload } from './TerminalGrid';
 import SearchBar from './SearchBar';
 import HistorySearch from './HistorySearch';
-import { useCommandHistory } from '../hooks/useCommandHistory';
+import { useCommandHistory, HistoryEntry } from '../hooks/useCommandHistory';
 import { useSessionContext } from '../lib/session-context';
 import { useCompletions } from '../hooks/useCompletions';
 import { useBlockVisibility } from '../hooks/useBlockVisibility';
@@ -212,8 +212,46 @@ function Terminal({ paneId, onTitleChange }: TerminalProps) {
               setRunningCommand(null);
               getCwd().then((dir) => {
                 setCwd(dir);
-                getGitInfo(dir).then(setGitInfo).catch(() => setGitInfo(null));
-              }).catch(() => {});
+                getGitInfo(dir).then((gi) => {
+                  setGitInfo(gi);
+                  // Add rich history entry at command completion time
+                  if (completedBlockInfo) {
+                    const historyEntry: HistoryEntry = {
+                      command: completedBlockInfo.command,
+                      timestamp: completedBlockInfo.timestamp,
+                      exitCode: completedBlockInfo.exitCode,
+                      cwd: dir,
+                      gitBranch: gi?.branch,
+                      shellType,
+                    };
+                    addCommand(historyEntry);
+                  }
+                }).catch(() => {
+                  setGitInfo(null);
+                  // Still add history even if git info fails
+                  if (completedBlockInfo) {
+                    const historyEntry: HistoryEntry = {
+                      command: completedBlockInfo.command,
+                      timestamp: completedBlockInfo.timestamp,
+                      exitCode: completedBlockInfo.exitCode,
+                      cwd: dir,
+                      shellType,
+                    };
+                    addCommand(historyEntry);
+                  }
+                });
+              }).catch(() => {
+                // Still add history even if CWD fetch fails
+                if (completedBlockInfo) {
+                  const historyEntry: HistoryEntry = {
+                    command: completedBlockInfo.command,
+                    timestamp: completedBlockInfo.timestamp,
+                    exitCode: completedBlockInfo.exitCode,
+                    shellType,
+                  };
+                  addCommand(historyEntry);
+                }
+              });
               // Show desktop notification for long-running commands
               if (completedBlockInfo) {
                 const { command, exitCode, timestamp } = completedBlockInfo;
@@ -259,8 +297,43 @@ function Terminal({ paneId, onTitleChange }: TerminalProps) {
               setRunningCommand(null);
               getCwd().then((dir) => {
                 setCwd(dir);
-                getGitInfo(dir).then(setGitInfo).catch(() => setGitInfo(null));
-              }).catch(() => {});
+                getGitInfo(dir).then((gi) => {
+                  setGitInfo(gi);
+                  if (completedBlockInfo) {
+                    const historyEntry: HistoryEntry = {
+                      command: completedBlockInfo.command,
+                      timestamp: completedBlockInfo.timestamp,
+                      exitCode: completedBlockInfo.exitCode,
+                      cwd: dir,
+                      gitBranch: gi?.branch,
+                      shellType,
+                    };
+                    addCommand(historyEntry);
+                  }
+                }).catch(() => {
+                  setGitInfo(null);
+                  if (completedBlockInfo) {
+                    const historyEntry: HistoryEntry = {
+                      command: completedBlockInfo.command,
+                      timestamp: completedBlockInfo.timestamp,
+                      exitCode: completedBlockInfo.exitCode,
+                      cwd: dir,
+                      shellType,
+                    };
+                    addCommand(historyEntry);
+                  }
+                });
+              }).catch(() => {
+                if (completedBlockInfo) {
+                  const historyEntry: HistoryEntry = {
+                    command: completedBlockInfo.command,
+                    timestamp: completedBlockInfo.timestamp,
+                    exitCode: completedBlockInfo.exitCode,
+                    shellType,
+                  };
+                  addCommand(historyEntry);
+                }
+              });
               // Show desktop notification for long-running commands
               if (completedBlockInfo) {
                 const { command, exitCode, timestamp } = completedBlockInfo;
@@ -670,7 +743,13 @@ function Terminal({ paneId, onTitleChange }: TerminalProps) {
       }
 
       // CLI mode: execute normally
-      addCommand(trimmed);
+      // Add a basic history entry immediately for navigation; it will be
+      // replaced with full metadata (exitCode, cwd, gitBranch) at completion.
+      addCommand({
+        command: trimmed,
+        timestamp: Date.now(),
+        shellType,
+      });
       submitCommand(trimmed);
       setInput('');
       // Reset block navigation focus on submit
