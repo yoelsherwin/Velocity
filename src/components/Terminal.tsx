@@ -20,6 +20,7 @@ import TerminalGrid, { GridRow } from './TerminalGrid';
 import SearchBar from './SearchBar';
 import HistorySearch from './HistorySearch';
 import { useCommandHistory } from '../hooks/useCommandHistory';
+import { useSessionContext } from '../lib/session-context';
 import { useCompletions } from '../hooks/useCompletions';
 import { useBlockVisibility } from '../hooks/useBlockVisibility';
 import { useSearch } from '../hooks/useSearch';
@@ -53,9 +54,13 @@ interface TerminalProps {
 }
 
 function Terminal({ paneId, onTitleChange }: TerminalProps) {
+  const { getSavedPane, updatePaneData } = useSessionContext();
+  const savedPaneRef = useRef(paneId ? getSavedPane(paneId) : undefined);
+  const savedPane = savedPaneRef.current;
+
   const sessionIdRef = useRef<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [shellType, setShellType] = useState<ShellType>('powershell');
+  const [shellType, setShellType] = useState<ShellType>(savedPane?.shellType ?? 'powershell');
   const [blocks, setBlocks] = useState<Block[]>([]);
   const blocksRef = useRef<Block[]>(blocks);
   blocksRef.current = blocks;
@@ -80,11 +85,14 @@ function Terminal({ paneId, onTitleChange }: TerminalProps) {
   const knownCommands = useKnownCommands();
 
   const [cursorPos, setCursorPos] = useState(0);
-  const [cwd, setCwd] = useState('C:\\');
+  const [cwd, setCwd] = useState(savedPane?.cwd ?? 'C:\\');
   const [gitInfo, setGitInfo] = useState<GitInfo | null>(null);
   const [runningCommand, setRunningCommand] = useState<string | null>(null);
 
-  const { history, addCommand, navigateUp, navigateDown, reset, setDraft } = useCommandHistory();
+  const { history, addCommand, navigateUp, navigateDown, reset, setDraft } = useCommandHistory(
+    100,
+    savedPane?.history ?? [],
+  );
   const completions = useCompletions(input, cursorPos, history, knownCommands, cwd);
   const { visibleIds, observeBlock } = useBlockVisibility();
   const search = useSearch(blocks);
@@ -418,7 +426,14 @@ function Terminal({ paneId, onTitleChange }: TerminalProps) {
 
   // Initialize session on mount
   useEffect(() => {
-    startSession('powershell');
+    const initialShell = savedPaneRef.current?.shellType ?? 'powershell';
+    const initialCwd = savedPaneRef.current?.cwd;
+    startSession(initialShell).then(() => {
+      // After session starts, cd to saved CWD if available
+      if (initialCwd && initialCwd !== 'C:\\' && sessionIdRef.current) {
+        writeToSession(sessionIdRef.current, `cd "${initialCwd}"\r`).catch(() => {});
+      }
+    }).catch(() => {});
 
     return () => {
       // Invalidate any in-flight startSession from this mount
@@ -431,6 +446,17 @@ function Terminal({ paneId, onTitleChange }: TerminalProps) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Report pane session data for persistence
+  useEffect(() => {
+    if (paneId) {
+      updatePaneData(paneId, {
+        shellType,
+        cwd,
+        history,
+      });
+    }
+  }, [paneId, shellType, cwd, history, updatePaneData]);
 
   // Fetch CWD and git info for completions and prompt display
   useEffect(() => {

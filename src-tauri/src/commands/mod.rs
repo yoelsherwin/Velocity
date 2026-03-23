@@ -1,5 +1,6 @@
 use crate::llm;
 use crate::pty::SessionManager;
+use crate::session;
 use crate::settings::{self, AppSettings};
 use serde::Serialize;
 use std::sync::{Arc, Mutex};
@@ -500,6 +501,16 @@ pub async fn get_completions(
     tokio::task::spawn_blocking(move || compute_completions(&p, &c, &ctx))
         .await
         .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn save_session(state: String) -> Result<(), String> {
+    session::save_session(&state)
+}
+
+#[tauri::command]
+pub async fn load_session() -> Result<Option<String>, String> {
+    session::load_session()
 }
 
 #[cfg(test)]

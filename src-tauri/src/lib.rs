@@ -2,6 +2,7 @@ pub mod ansi;
 mod commands;
 pub mod llm;
 pub mod pty;
+pub mod session;
 pub mod settings;
 
 use commands::AppState;
@@ -29,6 +30,8 @@ pub fn run() {
             commands::classify_intent_llm,
             commands::suggest_fix,
             commands::get_git_info,
+            commands::save_session,
+            commands::load_session,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

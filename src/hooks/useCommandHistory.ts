@@ -12,12 +12,15 @@ interface UseCommandHistory {
 
 const DEFAULT_MAX_HISTORY = 100;
 
-export function useCommandHistory(maxHistory: number = DEFAULT_MAX_HISTORY): UseCommandHistory {
-  const [history, setHistory] = useState<string[]>([]);
+export function useCommandHistory(
+  maxHistory: number = DEFAULT_MAX_HISTORY,
+  initialHistory: string[] = [],
+): UseCommandHistory {
+  const [history, setHistory] = useState<string[]>(initialHistory);
   const [draft, setDraft] = useState('');
   const indexRef = useRef<number | null>(null);
   // Keep a ref mirror of history for synchronous access in navigateUp/Down
-  const historyRef = useRef<string[]>([]);
+  const historyRef = useRef<string[]>(initialHistory);
   const draftRef = useRef('');
 
   // Sync draft ref

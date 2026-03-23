@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Tab, PaneDirection, PaneNode } from '../../lib/types';
 import { splitPane, closePane, countLeaves, getLeafIds, updatePaneRatio } from '../../lib/pane-utils';
 import TabBar from './TabBar';
@@ -8,6 +8,9 @@ import CommandPalette from '../CommandPalette';
 import { getSettings, saveSettings } from '../../lib/settings';
 import { applyFontSettings } from '../../lib/font-settings';
 import { applyThemeById, isValidThemeId, DEFAULT_THEME_ID } from '../../lib/themes';
+import { loadSessionState, SessionState, SavedPane } from '../../lib/session';
+import { useSessionPersistence } from '../../hooks/useSessionPersistence';
+import { SessionContext, buildPaneLookup } from '../../lib/session-context';
 
 const MAX_PANES_TOTAL = 20;
 
@@ -24,24 +27,83 @@ function findNewPaneId(oldRoot: PaneNode, newRoot: PaneNode): string | null {
   return null;
 }
 
+// Cached session state loaded before first render — populated by loadInitialSession()
+let cachedSessionState: SessionState | null = null;
+let sessionLoadAttempted = false;
+
+/** Pre-load session state. Call once before first render. */
+export async function loadInitialSession(): Promise<void> {
+  if (sessionLoadAttempted) return;
+  sessionLoadAttempted = true;
+  try {
+    cachedSessionState = await loadSessionState();
+  } catch {
+    cachedSessionState = null;
+  }
+}
+
+function createDefaultTabs(counter: { current: number }): Tab[] {
+  const initialPaneId = crypto.randomUUID();
+  const initialTab: Tab = {
+    id: crypto.randomUUID(),
+    title: `Terminal ${counter.current}`,
+    shellType: 'powershell',
+    paneRoot: { type: 'leaf', id: initialPaneId },
+    focusedPaneId: initialPaneId,
+  };
+  return [initialTab];
+}
+
+function restoreTabsFromSession(session: SessionState, counter: { current: number }): Tab[] {
+  if (!session.tabs || session.tabs.length === 0) {
+    return createDefaultTabs(counter);
+  }
+  counter.current = session.tabs.length;
+  return session.tabs.map((st) => ({
+    id: st.id,
+    title: st.title,
+    shellType: st.shellType,
+    paneRoot: st.paneRoot,
+    focusedPaneId: st.focusedPaneId,
+  }));
+}
+
 function TabManager() {
   const tabCounterRef = useRef(1);
   const [tabs, setTabs] = useState<Tab[]>(() => {
-    const initialPaneId = crypto.randomUUID();
-    const initialTab: Tab = {
-      id: crypto.randomUUID(),
-      title: `Terminal ${tabCounterRef.current}`,
-      shellType: 'powershell',
-      paneRoot: { type: 'leaf', id: initialPaneId },
-      focusedPaneId: initialPaneId,
-    };
-    return [initialTab];
+    if (cachedSessionState) {
+      return restoreTabsFromSession(cachedSessionState, tabCounterRef);
+    }
+    return createDefaultTabs(tabCounterRef);
   });
   const tabsRef = useRef(tabs);
-  const [activeTabId, setActiveTabId] = useState<string>(() => tabs[0].id);
+  const [activeTabId, setActiveTabId] = useState<string>(() => {
+    if (cachedSessionState && cachedSessionState.activeTabId) {
+      // Validate the active tab ID exists in restored tabs
+      const restoredTabs = tabs;
+      if (restoredTabs.some((t) => t.id === cachedSessionState!.activeTabId)) {
+        return cachedSessionState!.activeTabId;
+      }
+    }
+    return tabs[0].id;
+  });
   const activeTabIdRef = useRef(activeTabId);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+
+  // Session persistence
+  const sessionPersistence = useSessionPersistence();
+  const restoredSessionRef = useRef<SessionState | null>(cachedSessionState);
+  const paneLookupRef = useRef(buildPaneLookup(cachedSessionState));
+
+  const getSavedPane = useCallback((paneId: string): SavedPane | undefined => {
+    return paneLookupRef.current.get(paneId);
+  }, []);
+
+  const sessionContextValue = useMemo(() => ({
+    getSavedPane,
+    updatePaneData: sessionPersistence.updatePaneData,
+  }), [getSavedPane, sessionPersistence.updatePaneData]);
 
   // Map of tabId -> fallback title (e.g. "Terminal 1"), used when no CWD is available
   const fallbackTitlesRef = useRef<Map<string, string>>(new Map([[tabs[0].id, tabs[0].title]]));
@@ -75,6 +137,20 @@ function TabManager() {
   useEffect(() => {
     tabsRef.current = tabs;
   }, [tabs]);
+
+  // Save session whenever tabs or activeTabId change (debounced)
+  useEffect(() => {
+    sessionPersistence.requestSave(tabs, activeTabId);
+  }, [tabs, activeTabId, sessionPersistence]);
+
+  // Save session immediately on window close
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      sessionPersistence.saveNow(tabsRef.current, activeTabIdRef.current);
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [sessionPersistence]);
 
   const updateActiveTabId = useCallback((id: string) => {
     activeTabIdRef.current = id;
@@ -346,44 +422,46 @@ function TabManager() {
   );
 
   return (
-    <div className="tab-manager">
-      <TabBar
-        tabs={tabs}
-        activeTabId={activeTabId}
-        onSelectTab={handleSelectTab}
-        onCloseTab={handleCloseTab}
-        onNewTab={handleNewTab}
-        onOpenSettings={() => setSettingsOpen(true)}
-      />
-      <div className="tab-content">
-        {tabs.map((tab) => (
-          <div
-            key={tab.id}
-            className="tab-panel"
-            style={{ display: tab.id === activeTabId ? 'flex' : 'none' }}
-            data-testid={`tab-panel-${tab.id}`}
-          >
-            <PaneContainer
-              node={tab.paneRoot}
-              focusedPaneId={tab.id === activeTabId ? focusedPaneId : tab.focusedPaneId}
-              onFocusPane={handleFocusPane}
-              onSplitPane={(paneId, dir) => handleSplitPane(tab.id, paneId, dir)}
-              onClosePane={(paneId) => handleClosePane(tab.id, paneId)}
-              onResizePane={(splitId, newRatio) => handleResizePane(tab.id, splitId, newRatio)}
-              onTitleChange={(paneId, title) => handleTitleChange(tab.id, paneId, title)}
-              isOnlyPane={countLeaves(tab.paneRoot) === 1}
-            />
-          </div>
-        ))}
-      </div>
-      {paletteOpen && (
-        <CommandPalette
-          onExecute={handlePaletteAction}
-          onClose={() => setPaletteOpen(false)}
+    <SessionContext.Provider value={sessionContextValue}>
+      <div className="tab-manager">
+        <TabBar
+          tabs={tabs}
+          activeTabId={activeTabId}
+          onSelectTab={handleSelectTab}
+          onCloseTab={handleCloseTab}
+          onNewTab={handleNewTab}
+          onOpenSettings={() => setSettingsOpen(true)}
         />
-      )}
-      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
-    </div>
+        <div className="tab-content">
+          {tabs.map((tab) => (
+            <div
+              key={tab.id}
+              className="tab-panel"
+              style={{ display: tab.id === activeTabId ? 'flex' : 'none' }}
+              data-testid={`tab-panel-${tab.id}`}
+            >
+              <PaneContainer
+                node={tab.paneRoot}
+                focusedPaneId={tab.id === activeTabId ? focusedPaneId : tab.focusedPaneId}
+                onFocusPane={handleFocusPane}
+                onSplitPane={(paneId, dir) => handleSplitPane(tab.id, paneId, dir)}
+                onClosePane={(paneId) => handleClosePane(tab.id, paneId)}
+                onResizePane={(splitId, newRatio) => handleResizePane(tab.id, splitId, newRatio)}
+                onTitleChange={(paneId, title) => handleTitleChange(tab.id, paneId, title)}
+                isOnlyPane={countLeaves(tab.paneRoot) === 1}
+              />
+            </div>
+          ))}
+        </div>
+        {paletteOpen && (
+          <CommandPalette
+            onExecute={handlePaletteAction}
+            onClose={() => setPaletteOpen(false)}
+          />
+        )}
+        {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
+      </div>
+    </SessionContext.Provider>
   );
 }
 
