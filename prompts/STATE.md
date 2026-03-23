@@ -38,6 +38,12 @@ None.
 | P1-I2 | History search (Ctrl+R) | **DONE** (`2ea1e4a`) |
 | P1-U1 | Custom themes + theme library | **DONE** (`f836755` + `a41fd3b`) |
 | P1-B3 | Block collapse/expand | **DONE** (`589da48` + `196f5a8`) |
+| P1-B5 | Sticky command header | **DONE** (`TASK-033`) |
+| P1-U3 | Git context in prompt | **DONE** (`ade4a56`) |
+| P1-A2 | AI error correction | **DONE** (`37bbd0a`) |
+| P1-U8 | Per-tab auto-titles | **DONE** (`a8b8c70`) |
+| P1-W3 | Secret redaction | **DONE** (`a481e2b`) |
+| P1-W1 | Session restoration | **DONE** (`454d392` + `278eb12`) |
 
 ## Outstanding Issues
 
@@ -65,6 +71,7 @@ None.
 - QA-030 BUG-001: matchIndex desync if history changes during search
 - QA-030 BUG-002: Ctrl+R opens history search during alt screen mode
 - QA-031 BUG-001: Theme preview not reverted on Cancel in SettingsModal
+- CR-035 F-1: truncate_error_output byte slicing can panic on multi-byte UTF-8
 
 ### Low
 - BUG-010, 028, 029, 031, 032, 035, 038, 040, 041
@@ -91,11 +98,11 @@ None.
 
 | Layer | Count |
 |-------|-------|
-| Vitest (frontend) | 431 |
-| cargo test (Rust unit) | 117 (+1 ignored) |
+| Vitest (frontend) | 531 |
+| cargo test (Rust unit) | 138 (+1 ignored) |
 | Rust integration | 11 |
 | Playwright E2E | 28 |
-| **Total** | **~587** |
+| **Total** | **~708** |
 
 ## Remaining Phase 1 Roadmap
 
