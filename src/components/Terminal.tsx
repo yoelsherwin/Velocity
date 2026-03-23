@@ -60,6 +60,7 @@ function Terminal({ paneId }: TerminalProps) {
   const [closed, setClosed] = useState(false);
   const [altScreenActive, setAltScreenActive] = useState(false);
   const [focusedBlockIndex, setFocusedBlockIndex] = useState(-1);
+  const [collapsedBlocks, setCollapsedBlocks] = useState<Set<string>>(new Set());
   const [gridRows, setGridRows] = useState<GridRow[]>([]);
   const [agentLoading, setAgentLoading] = useState(false);
   const [agentError, setAgentError] = useState<string | null>(null);
@@ -436,6 +437,15 @@ function Terminal({ paneId }: TerminalProps) {
           : withNew;
       });
       activeBlockIdRef.current = newBlock.id;
+      // Auto-expand the new running block if it was somehow collapsed
+      setCollapsedBlocks((prev) => {
+        if (prev.has(newBlock.id)) {
+          const next = new Set(prev);
+          next.delete(newBlock.id);
+          return next;
+        }
+        return prev;
+      });
       // Skip the exit-code marker for commands that kill the shell (e.g. "exit").
       // The marker suffix would never execute and its echoed text clutters the output.
       const trimmedLower = command.trim().toLowerCase();
@@ -460,6 +470,30 @@ function Terminal({ paneId }: TerminalProps) {
     },
     [submitCommand],
   );
+
+  const toggleBlockCollapse = useCallback((blockId: string) => {
+    setCollapsedBlocks((prev) => {
+      const next = new Set(prev);
+      if (next.has(blockId)) {
+        next.delete(blockId);
+      } else {
+        next.add(blockId);
+      }
+      return next;
+    });
+  }, []);
+
+  const collapseAllBlocks = useCallback(() => {
+    setCollapsedBlocks(new Set(
+      blocksRef.current
+        .filter((b) => b.command !== '' && b.status !== 'running')
+        .map((b) => b.id),
+    ));
+  }, []);
+
+  const expandAllBlocks = useCallback(() => {
+    setCollapsedBlocks(new Set());
+  }, []);
 
   const handleSubmit = useCallback(
     async (cmd: string) => {
@@ -621,8 +655,19 @@ function Terminal({ paneId }: TerminalProps) {
   );
 
   // Block navigation: Ctrl+Up/Down (document-level, like Ctrl+Shift+F)
+  // Enter/Space toggles collapse on focused block
   useEffect(() => {
     const handleBlockNav = (e: KeyboardEvent) => {
+      // Enter/Space toggles collapse when a block is focused
+      if ((e.key === 'Enter' || e.key === ' ') && focusedBlockIndex >= 0) {
+        const block = blocksRef.current[focusedBlockIndex];
+        if (block && block.command !== '') {
+          e.preventDefault();
+          toggleBlockCollapse(block.id);
+          return;
+        }
+      }
+
       if (!e.ctrlKey || e.shiftKey || e.altKey || e.metaKey) return;
 
       if (e.key === 'ArrowDown') {
@@ -646,7 +691,7 @@ function Terminal({ paneId }: TerminalProps) {
 
     document.addEventListener('keydown', handleBlockNav);
     return () => document.removeEventListener('keydown', handleBlockNav);
-  }, []);
+  }, [focusedBlockIndex, toggleBlockCollapse]);
 
   // Scroll focused block into view
   useEffect(() => {
@@ -794,6 +839,21 @@ function Terminal({ paneId }: TerminalProps) {
             setHistorySearchOpen(true);
           }
           break;
+        case 'block.collapseAll':
+          collapseAllBlocks();
+          break;
+        case 'block.expandAll':
+          expandAllBlocks();
+          break;
+        case 'block.toggleCollapse': {
+          if (focusedBlockIndex >= 0) {
+            const block = blocksRef.current[focusedBlockIndex];
+            if (block && block.command !== '') {
+              toggleBlockCollapse(block.id);
+            }
+          }
+          break;
+        }
         default:
           break;
       }
@@ -801,7 +861,7 @@ function Terminal({ paneId }: TerminalProps) {
 
     document.addEventListener('velocity:command', handleCommand);
     return () => document.removeEventListener('velocity:command', handleCommand);
-  }, [paneId, handleShellSwitch, handleRestart, handleToggleMode, search.isOpen, search.open, historySearchOpen, input]);
+  }, [paneId, handleShellSwitch, handleRestart, handleToggleMode, search.isOpen, search.open, historySearchOpen, input, collapseAllBlocks, expandAllBlocks, toggleBlockCollapse, focusedBlockIndex]);
 
   // Scroll to current match when it changes
   useEffect(() => {
@@ -903,18 +963,25 @@ function Terminal({ paneId }: TerminalProps) {
             onClose={handleSearchClose}
             inputRef={searchInputRef}
           />
-          {blocks.map((block, index) => (
-            <BlockView
-              key={block.id}
-              block={block}
-              isActive={block.id === activeBlockIdRef.current}
-              isFocused={index === focusedBlockIndex}
-              onRerun={handleRerun}
-              isVisible={visibleIds.has(block.id)}
-              observeRef={(el) => observeBlock(block.id, el)}
-              highlights={blockHighlights.get(block.id)}
-            />
-          ))}
+          {blocks.map((block, index) => {
+            // Active running blocks are never collapsed
+            const isRunning = block.id === activeBlockIdRef.current && block.status === 'running';
+            const isCollapsed = !isRunning && collapsedBlocks.has(block.id);
+            return (
+              <BlockView
+                key={block.id}
+                block={block}
+                isActive={block.id === activeBlockIdRef.current}
+                isFocused={index === focusedBlockIndex}
+                isCollapsed={isCollapsed}
+                onToggleCollapse={() => toggleBlockCollapse(block.id)}
+                onRerun={handleRerun}
+                isVisible={visibleIds.has(block.id)}
+                observeRef={(el) => observeBlock(block.id, el)}
+                highlights={blockHighlights.get(block.id)}
+              />
+            );
+          })}
           {closed && <div className="block-process-exited">[Process exited]</div>}
         </div>
       )}

@@ -8,13 +8,15 @@ interface BlockViewProps {
   block: Block;
   isActive: boolean;        // true if this is the currently running block
   isFocused?: boolean;      // true if this block is focused via Ctrl+Up/Down navigation
+  isCollapsed?: boolean;    // true if this block's output is collapsed
+  onToggleCollapse?: () => void;  // callback to toggle collapse state
   onRerun: (command: string) => void;
   isVisible?: boolean;      // true if block is in or near the viewport
   observeRef?: (el: HTMLDivElement | null) => void;  // callback ref for IntersectionObserver
   highlights?: HighlightRange[];  // search match highlights for this block
 }
 
-function BlockView({ block, isActive, isFocused = false, onRerun, isVisible = true, observeRef, highlights }: BlockViewProps) {
+function BlockView({ block, isActive, isFocused = false, isCollapsed = false, onToggleCollapse, onRerun, isVisible = true, observeRef, highlights }: BlockViewProps) {
   const formattedTime = useMemo(() => {
     return new Date(block.timestamp).toLocaleTimeString();
   }, [block.timestamp]);
@@ -40,12 +42,20 @@ function BlockView({ block, isActive, isFocused = false, onRerun, isVisible = tr
   return (
     <div
       ref={observeRef}
-      className={`block-container ${isActive && block.status === 'running' ? 'block-active' : ''} ${isFocused ? 'block-focused' : ''}`}
+      className={`block-container ${isActive && block.status === 'running' ? 'block-active' : ''} ${isFocused ? 'block-focused' : ''} ${isCollapsed ? 'block-collapsed' : ''}`}
       data-testid="block-container"
     >
       {!isWelcome && (
         <div className="block-header">
           <div className="block-command-row">
+            <button
+              className="collapse-toggle"
+              data-testid="collapse-toggle"
+              onClick={onToggleCollapse}
+              aria-label={isCollapsed ? 'Expand block' : 'Collapse block'}
+            >
+              {isCollapsed ? '\u25B6' : '\u25BC'}
+            </button>
             {isActive && block.status === 'running' && (
               <span className="block-running-indicator" aria-label="running">
                 ●
@@ -56,6 +66,9 @@ function BlockView({ block, isActive, isFocused = false, onRerun, isVisible = tr
             </span>
           </div>
           <div className="block-header-right">
+            {isCollapsed && (
+              <span className="block-collapsed-indicator">...</span>
+            )}
             {block.exitCode !== undefined && block.exitCode !== null && (
               <span className={`block-exit-code ${block.exitCode === 0 ? 'exit-success' : 'exit-failure'}`}>
                 {block.exitCode === 0 ? '\u2713' : `\u2717 ${block.exitCode}`}
@@ -65,7 +78,7 @@ function BlockView({ block, isActive, isFocused = false, onRerun, isVisible = tr
           </div>
         </div>
       )}
-      {block.output && (
+      {!isCollapsed && block.output && (
         isVisible ? (
           <pre className="block-output" data-testid="block-output">
             <AnsiOutput text={block.output} highlights={highlights} />
@@ -78,21 +91,23 @@ function BlockView({ block, isActive, isFocused = false, onRerun, isVisible = tr
           />
         )
       )}
-      <div className="block-actions">
-        {!isWelcome && (
-          <>
-            <button className="block-action-btn" onClick={handleCopyCommand}>
-              Copy Command
-            </button>
-            <button className="block-action-btn" onClick={handleRerun}>
-              Rerun
-            </button>
-          </>
-        )}
-        <button className="block-action-btn" onClick={handleCopyOutput}>
-          Copy Output
-        </button>
-      </div>
+      {!isCollapsed && (
+        <div className="block-actions">
+          {!isWelcome && (
+            <>
+              <button className="block-action-btn" onClick={handleCopyCommand}>
+                Copy Command
+              </button>
+              <button className="block-action-btn" onClick={handleRerun}>
+                Rerun
+              </button>
+            </>
+          )}
+          <button className="block-action-btn" onClick={handleCopyOutput}>
+            Copy Output
+          </button>
+        </div>
+      )}
     </div>
   );
 }

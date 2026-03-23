@@ -31,6 +31,8 @@
   --border-color: #313244;
   --scrollbar-thumb: #585b70;
   --selection-bg: rgba(137, 180, 250, 0.3);
+  --accent-red-bg: rgba(243, 139, 168, 0.1);
+  --accent-blue-bg: rgba(137, 180, 250, 0.1);
   --search-highlight-bg: rgba(249, 226, 175, 0.3);
   --search-highlight-current-bg: rgba(249, 226, 175, 0.7);
   --search-highlight-current-outline: #f9e2af;
@@ -233,6 +235,39 @@ html, body, #root {
   color: var(--text-primary);
 }
 
+/* --- Block Collapse Styles --- */
+
+.collapse-toggle {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 10px;
+  padding: 0 4px;
+  line-height: 1;
+  transition: color 0.15s;
+  flex-shrink: 0;
+}
+
+.collapse-toggle:hover {
+  color: var(--text-primary);
+}
+
+.block-collapsed {
+  background-color: var(--bg-deep);
+}
+
+.block-collapsed .block-header {
+  border-bottom: none;
+  margin-bottom: 0;
+}
+
+.block-collapsed-indicator {
+  color: var(--text-muted);
+  font-size: 12px;
+  letter-spacing: 2px;
+}
+
 .block-running-indicator {
   color: var(--accent-blue);
   font-size: 10px;
@@ -370,7 +405,7 @@ html, body, #root {
 
 .tab-close:hover {
   color: var(--accent-red);
-  background-color: rgba(243, 139, 168, 0.1);
+  background-color: var(--accent-red-bg);
 }
 
 .tab-new {
@@ -598,7 +633,7 @@ html, body, #root {
 .settings-error {
   padding: 8px 12px;
   border-radius: 4px;
-  background-color: rgba(243, 139, 168, 0.1);
+  background-color: var(--accent-red-bg);
   border: 1px solid var(--accent-red);
   color: var(--accent-red);
   font-size: 13px;
@@ -814,7 +849,7 @@ html, body, #root {
 .search-case-btn-active {
   color: var(--accent-blue);
   border-color: var(--accent-blue);
-  background-color: rgba(137, 180, 250, 0.1);
+  background-color: var(--accent-blue-bg);
 }
 
 .search-close-btn {
