@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useSessionPersistence } from '../hooks/useSessionPersistence';
+import { isValidCwdPath } from '../lib/session';
 import type { Tab } from '../lib/types';
 
 // Mock the Tauri invoke
@@ -272,5 +273,61 @@ describe('session persistence', () => {
     expect(savedState.tabs[0].panes[0].history).toHaveLength(100);
     // Should keep the LAST 100
     expect(savedState.tabs[0].panes[0].history[0]).toBe('cmd-50');
+  });
+});
+
+describe('isValidCwdPath', () => {
+  it('accepts normal Windows paths', () => {
+    expect(isValidCwdPath('C:\\')).toBe(true);
+    expect(isValidCwdPath('C:\\Users\\test\\Documents')).toBe(true);
+    expect(isValidCwdPath('D:\\My Projects\\app')).toBe(true);
+  });
+
+  it('accepts normal Unix paths', () => {
+    expect(isValidCwdPath('/home/user')).toBe(true);
+    expect(isValidCwdPath('/usr/local/bin')).toBe(true);
+  });
+
+  it('accepts paths with spaces and hyphens', () => {
+    expect(isValidCwdPath('C:\\Program Files\\My App')).toBe(true);
+    expect(isValidCwdPath('/home/user/my-project')).toBe(true);
+  });
+
+  it('rejects paths with semicolons (command chaining)', () => {
+    expect(isValidCwdPath('C:\\foo; rm -rf /')).toBe(false);
+  });
+
+  it('rejects paths with pipe (command piping)', () => {
+    expect(isValidCwdPath('C:\\foo | malicious')).toBe(false);
+  });
+
+  it('rejects paths with ampersand (command chaining)', () => {
+    expect(isValidCwdPath('C:\\foo & echo pwned')).toBe(false);
+  });
+
+  it('rejects paths with backticks (command substitution)', () => {
+    expect(isValidCwdPath('C:\\foo`whoami`')).toBe(false);
+  });
+
+  it('rejects paths with dollar sign (variable expansion)', () => {
+    expect(isValidCwdPath('C:\\$HOME')).toBe(false);
+    expect(isValidCwdPath('C:\\$(whoami)')).toBe(false);
+  });
+
+  it('rejects paths with parentheses (subshell)', () => {
+    expect(isValidCwdPath('C:\\foo(bar)')).toBe(false);
+  });
+
+  it('rejects paths with newlines (command injection)', () => {
+    expect(isValidCwdPath('C:\\foo\nrm -rf /')).toBe(false);
+    expect(isValidCwdPath('C:\\foo\rrm -rf /')).toBe(false);
+  });
+
+  it('rejects paths with curly braces', () => {
+    expect(isValidCwdPath('C:\\foo{bar}')).toBe(false);
+  });
+
+  it('rejects paths with square brackets', () => {
+    expect(isValidCwdPath('C:\\foo[0]')).toBe(false);
   });
 });

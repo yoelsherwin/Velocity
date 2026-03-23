@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useQuitWarning } from '../hooks/useQuitWarning';
 import { listen } from '@tauri-apps/api/event';
 import { createSession, writeToSession, closeSession, startReading } from '../lib/pty';
+import { isValidCwdPath } from '../lib/session';
 import { SHELL_TYPES, ShellType, Block } from '../lib/types';
 import { extractExitCode, getExitCodeMarker } from '../lib/exit-code-parser';
 import { classifyIntent, stripHashPrefix, ClassificationResult } from '../lib/intent-classifier';
@@ -430,8 +431,14 @@ function Terminal({ paneId, onTitleChange }: TerminalProps) {
     const initialCwd = savedPaneRef.current?.cwd;
     startSession(initialShell).then(() => {
       // After session starts, cd to saved CWD if available
-      if (initialCwd && initialCwd !== 'C:\\' && sessionIdRef.current) {
-        writeToSession(sessionIdRef.current, `cd "${initialCwd}"\r`).catch(() => {});
+      if (initialCwd && initialCwd !== 'C:\\' && sessionIdRef.current && isValidCwdPath(initialCwd)) {
+        // Use shell-appropriate safe commands to prevent metacharacter injection:
+        // - PowerShell: Set-Location -LiteralPath prevents wildcard/variable expansion
+        // - CMD/WSL: single quotes prevent variable expansion in most shells
+        const cdCommand = initialShell === 'powershell'
+          ? `Set-Location -LiteralPath '${initialCwd.replace(/'/g, "''")}'`
+          : `cd '${initialCwd.replace(/'/g, "'\\''")}'`;
+        writeToSession(sessionIdRef.current, cdCommand + '\r').catch(() => {});
       }
     }).catch(() => {});
 

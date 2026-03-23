@@ -28,6 +28,14 @@ export async function saveSessionState(state: SessionState): Promise<void> {
   return invoke<void>('save_session', { state: json });
 }
 
+/**
+ * Validates that a CWD path does not contain shell metacharacters that could
+ * enable command injection when the path is interpolated into a `cd` command.
+ */
+export function isValidCwdPath(path: string): boolean {
+  return !/[;&|`$(){}[\]\n\r]/.test(path);
+}
+
 export async function loadSessionState(): Promise<SessionState | null> {
   const json = await invoke<string | null>('load_session');
   if (!json) return null;
