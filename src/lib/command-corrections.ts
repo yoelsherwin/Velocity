@@ -57,10 +57,12 @@ export function suggestCorrection(
 ): TypoCorrection | null {
   if (!firstWord || knownCommands.size === 0) return null;
 
-  // If the first word is already a known command, no correction needed
-  if (knownCommands.has(firstWord)) return null;
-
   const lower = firstWord.toLowerCase();
+
+  // If the first word is already a known command (case-insensitive), no correction needed
+  for (const cmd of knownCommands) {
+    if (cmd.toLowerCase() === lower) return null;
+  }
   let bestMatch: string | null = null;
   let bestDistance = Infinity;
 
@@ -115,12 +117,11 @@ export function detectCommonPatterns(command: string): string | null {
 
 /** Patterns that indicate a "command not found" error */
 const NOT_FOUND_PATTERNS = [
-  /is not recognized as an internal or external command/i,
-  /not recognized/i,
-  /command not found/i,
-  /not found/i,
-  /is not a recognized/i,
-  /the term .+ is not recognized/i,
+  /is not recognized as an internal or external command/i,  // CMD
+  /the term .+ is not recognized/i,                         // PowerShell
+  /command not found/i,                                     // Bash/Zsh
+  /not found as a command/i,                                // some shells
+  /is not a recognized/i,                                   // CMD variant
 ];
 
 /**

@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { Block } from '../../lib/types';
 import { stripAnsi } from '../../lib/ansi';
 import { maskSecrets } from '../../lib/secretRedaction';
@@ -38,8 +38,36 @@ function BlockView({ block, isActive, isFocused = false, isCollapsed = false, on
 
   const { segments: redactedSegments, revealedIds, revealSecret } = useSecretRedaction(block.output);
 
+  // Debounce filter input for running blocks to avoid recalculating on every output chunk.
+  // For completed blocks the output is stable so no debounce is needed.
+  const [debouncedOutput, setDebouncedOutput] = useState(block.output);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    // If the filter is not active or block is not running, use the output directly
+    if (!filterOpen || !filterText || block.status !== 'running') {
+      setDebouncedOutput(block.output);
+      return;
+    }
+    // Debounce output updates while filtering a running block
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    debounceTimerRef.current = setTimeout(() => {
+      setDebouncedOutput(block.output);
+    }, 200);
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, [block.output, block.status, filterOpen, filterText]);
+
+  // Use debounced output for filter calculations, raw output for display when not filtering
+  const filterSourceOutput = (filterOpen && filterText) ? debouncedOutput : block.output;
+
   // Split output into lines for filtering. Each entry is the original (ANSI) line.
-  const outputLines = useMemo(() => block.output.split('\n'), [block.output]);
+  const outputLines = useMemo(() => filterSourceOutput.split('\n'), [filterSourceOutput]);
 
   // Compute filtered output: keep only lines whose stripped text matches filter
   const { filteredOutput, matchCount, totalCount } = useMemo(() => {
