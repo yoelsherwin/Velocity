@@ -1194,6 +1194,7 @@ function Terminal({ paneId, onTitleChange }: TerminalProps) {
                 cwd={cwd}
                 hasApiKey={hasApiKey}
                 isMostRecentFailed={block.id === mostRecentFailedBlockId}
+                knownCommands={knownCommands}
               />
             );
           })}
