@@ -113,6 +113,9 @@ pub fn validate_settings(settings: &AppSettings) -> Result<(), String> {
         if family.len() > 200 {
             return Err(format!("Font family too long ({} chars, max 200)", family.len()));
         }
+        if !family.chars().all(|c| c.is_alphanumeric() || " ,'-._".contains(c)) {
+            return Err("Font family contains invalid characters".to_string());
+        }
     }
 
     Ok(())
@@ -381,6 +384,63 @@ mod tests {
             line_height: None,
         };
         assert!(validate_settings(&settings).is_err());
+    }
+
+    #[test]
+    fn test_font_family_rejects_css_injection() {
+        let dangerous_inputs = vec![
+            "Consolas; background: red",
+            "Mono} body { display: none",
+            "Hack<script>alert(1)</script>",
+            "Mono()",
+            "Mono\\test",
+            "Mono\"test",
+            "Mono: bold",
+            "Mono/test",
+            "Mono!important",
+            "Mono@import",
+        ];
+        for input in dangerous_inputs {
+            let settings = AppSettings {
+                llm_provider: "openai".to_string(),
+                api_key: "key".to_string(),
+                model: "gpt-4o-mini".to_string(),
+                azure_endpoint: None,
+                font_family: Some(input.to_string()),
+                font_size: None,
+                line_height: None,
+            };
+            let result = validate_settings(&settings);
+            assert!(result.is_err(), "Should reject font_family: {:?}", input);
+            assert!(
+                result.unwrap_err().contains("invalid characters"),
+                "Error message should mention invalid characters for: {:?}",
+                input,
+            );
+        }
+    }
+
+    #[test]
+    fn test_font_family_accepts_valid_names() {
+        let valid_inputs = vec![
+            "JetBrains Mono",
+            "Consolas, 'Courier New', monospace",
+            "Fira Code",
+            "DejaVu Sans Mono",
+            "Source Code Pro",
+        ];
+        for input in valid_inputs {
+            let settings = AppSettings {
+                llm_provider: "openai".to_string(),
+                api_key: "key".to_string(),
+                model: "gpt-4o-mini".to_string(),
+                azure_endpoint: None,
+                font_family: Some(input.to_string()),
+                font_size: None,
+                line_height: None,
+            };
+            assert!(validate_settings(&settings).is_ok(), "Should accept font_family: {:?}", input);
+        }
     }
 
     #[test]

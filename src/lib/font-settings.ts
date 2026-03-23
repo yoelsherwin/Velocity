@@ -7,13 +7,13 @@ import { AppSettings } from './types';
  */
 export function applyFontSettings(settings: AppSettings): void {
   const root = document.documentElement;
-  if (settings.font_family) {
+  if (settings.font_family != null) {
     root.style.setProperty('--terminal-font-family', settings.font_family);
   }
-  if (settings.font_size) {
+  if (settings.font_size != null) {
     root.style.setProperty('--terminal-font-size', `${settings.font_size}px`);
   }
-  if (settings.line_height) {
+  if (settings.line_height != null) {
     root.style.setProperty('--terminal-line-height', String(settings.line_height));
   }
 }
