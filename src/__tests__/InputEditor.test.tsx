@@ -198,4 +198,29 @@ describe('InputEditor Component', () => {
     fireEvent.keyUp(textarea, { key: 'h' });
     expect(onCursorChange).toHaveBeenCalled();
   });
+
+  // --- Task 045: IDE cursor and selection highlighting ---
+
+  it('test_renders_custom_blinking_cursor_in_overlay', () => {
+    render(<InputEditor {...defaultProps} value="echo" />);
+    const editor = screen.getByTestId('input-editor');
+    const pre = editor.querySelector('.editor-highlight');
+    const cursor = pre!.querySelector('.editor-cursor');
+    expect(cursor).not.toBeNull();
+    expect(cursor!.classList.contains('editor-cursor-blink')).toBe(true);
+  });
+
+  it('test_cursor_in_empty_input', () => {
+    render(<InputEditor {...defaultProps} value="" />);
+    expect(screen.getByTestId('input-editor').querySelector('.editor-cursor')).not.toBeNull();
+  });
+
+  it('test_ghost_text_with_cursor', () => {
+    render(<InputEditor {...defaultProps} value="git co" ghostText="mmit" />);
+    const editor = screen.getByTestId('input-editor');
+    expect(editor.querySelector('.ghost-text')).not.toBeNull();
+    expect(editor.querySelector('.editor-cursor')).not.toBeNull();
+  });
+
+  // Selection tests are in ideCursor.test.tsx to avoid OOM in single worker
 });

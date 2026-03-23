@@ -1,5 +1,5 @@
-import { useMemo, useCallback, useRef, type RefObject } from 'react';
-import { tokenize } from '../../lib/shell-tokenizer';
+import { useMemo, useCallback, useRef, useState, type RefObject } from 'react';
+import { tokenize, Token } from '../../lib/shell-tokenizer';
 import { ClassificationResult } from '../../lib/intent-classifier';
 import type { GitInfo } from '../../lib/git';
 import ModeIndicator from './ModeIndicator';
@@ -21,11 +21,138 @@ interface InputEditorProps {
   gitInfo?: GitInfo | null;
 }
 
+/**
+ * Build the overlay content with cursor and selection highlighting.
+ *
+ * Walks through tokens, inserting a cursor element at `cursorPos` and
+ * wrapping characters in [selStart, selEnd) with a selection highlight span.
+ */
+function buildOverlayContent(
+  tokens: Token[],
+  cursorPos: number,
+  selStart: number,
+  selEnd: number,
+): React.ReactNode[] {
+  const hasSelection = selStart !== selEnd;
+  const nodes: React.ReactNode[] = [];
+  let charIndex = 0;
+
+  for (let t = 0; t < tokens.length; t++) {
+    const token = tokens[t];
+    const tokenStart = charIndex;
+    const tokenEnd = charIndex + token.value.length;
+    const className = `token-${token.type}`;
+
+    // If cursor is exactly at token start (and no selection), insert cursor before this token
+    if (!hasSelection && cursorPos === tokenStart) {
+      nodes.push(
+        <span key={`cursor-${charIndex}`} className="editor-cursor editor-cursor-blink" />,
+      );
+    }
+
+    // Check if this token intersects with the selection or contains the cursor
+    const selIntersects = hasSelection && selStart < tokenEnd && selEnd > tokenStart;
+    const cursorInside = !hasSelection && cursorPos > tokenStart && cursorPos < tokenEnd;
+
+    if (!selIntersects && !cursorInside) {
+      // Simple case: render the whole token as-is
+      nodes.push(
+        <span key={`t-${t}`} className={className}>
+          {token.value}
+        </span>,
+      );
+    } else {
+      // Need to split this token for cursor or selection insertion
+      const parts: React.ReactNode[] = [];
+      let i = 0;
+      const chars = token.value;
+
+      while (i < chars.length) {
+        const globalPos = tokenStart + i;
+
+        // Insert cursor at this position if needed
+        if (!hasSelection && globalPos === cursorPos) {
+          parts.push(
+            <span key={`cursor-${globalPos}`} className="editor-cursor editor-cursor-blink" />,
+          );
+        }
+
+        if (hasSelection && globalPos >= selStart && globalPos < selEnd) {
+          // Collect all selected characters within this token
+          const selChunkStart = i;
+          while (i < chars.length && tokenStart + i < selEnd) {
+            i++;
+          }
+          parts.push(
+            <span key={`sel-${globalPos}`} className="editor-selection">
+              {chars.slice(selChunkStart, i)}
+            </span>,
+          );
+        } else {
+          // Collect all non-selected characters until next boundary
+          const chunkStart = i;
+          while (i < chars.length) {
+            const gp = tokenStart + i;
+            if (!hasSelection && gp === cursorPos) break;
+            if (hasSelection && gp >= selStart && gp < selEnd) break;
+            i++;
+          }
+          if (i > chunkStart) {
+            parts.push(chars.slice(chunkStart, i));
+          }
+        }
+      }
+
+      nodes.push(
+        <span key={`t-${t}`} className={className}>
+          {parts}
+        </span>,
+      );
+    }
+
+    charIndex = tokenEnd;
+  }
+
+  // Cursor at the very end of all tokens
+  if (!hasSelection && cursorPos >= charIndex) {
+    nodes.push(
+      <span key={`cursor-end`} className="editor-cursor editor-cursor-blink" />,
+    );
+  }
+
+  return nodes;
+}
+
 function InputEditor({ value, onChange, onSubmit, disabled, ghostText, onNavigateUp, onNavigateDown, mode, onToggleMode, textareaRef: externalRef, onTab, onCursorChange, gitInfo }: InputEditorProps) {
   const internalRef = useRef<HTMLTextAreaElement>(null);
   const textareaRef = externalRef || internalRef;
 
+  // Use a counter to force re-render when selection changes
+  const [, setTick] = useState(0);
+
+  // Store selection in refs to avoid render loops
+  const cursorPosRef = useRef(0);
+  const selStartRef = useRef(0);
+  const selEndRef = useRef(0);
+
   const tokens = useMemo(() => tokenize(value), [value]);
+
+  const syncSelection = useCallback(() => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    // Only trigger re-render if selection actually changed
+    if (start !== cursorPosRef.current || start !== selStartRef.current || end !== selEndRef.current) {
+      cursorPosRef.current = start;
+      selStartRef.current = start;
+      selEndRef.current = end;
+      setTick((t) => t + 1);
+    }
+    if (onCursorChange) {
+      onCursorChange(start);
+    }
+  }, [onCursorChange, textareaRef]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -35,64 +162,53 @@ function InputEditor({ value, onChange, onSubmit, disabled, ghostText, onNavigat
       } else if (e.key === 'Tab') {
         e.preventDefault();
         if (ghostText && onTab) {
-          // Delegate ghost text acceptance to parent (Terminal) which uses
-          // completions.accept() for correct replacement semantics
           onTab();
         } else if (ghostText) {
-          // No onTab handler — accept ghost text by appending (history suggestion)
           onChange(value + ghostText);
         } else if (onTab) {
-          // Delegate to parent (Terminal) for completion cycling
           onTab();
         } else {
-          // Insert 2 spaces at cursor position
           const textarea = textareaRef.current;
           if (textarea) {
             const start = textarea.selectionStart;
             const end = textarea.selectionEnd;
             const newValue = value.substring(0, start) + '  ' + value.substring(end);
             onChange(newValue);
-            // Restore cursor position after React re-renders
             requestAnimationFrame(() => {
               textarea.selectionStart = start + 2;
               textarea.selectionEnd = start + 2;
+              syncSelection();
             });
           }
         }
       } else if (e.key === 'ArrowUp' && !e.shiftKey) {
-        // Only intercept if cursor is on the first line
         const textarea = textareaRef.current;
         if (textarea && textarea.selectionStart === textarea.selectionEnd) {
           const textBeforeCursor = value.substring(0, textarea.selectionStart);
           if (!textBeforeCursor.includes('\n')) {
-            // Cursor is on the first line — navigate history
             e.preventDefault();
             onNavigateUp?.();
-            // Don't call onChange — Terminal handles the state update directly
           }
         }
       } else if (e.key === 'ArrowDown' && !e.shiftKey) {
-        // Only intercept if cursor is on the last line
         const textarea = textareaRef.current;
         if (textarea && textarea.selectionStart === textarea.selectionEnd) {
           const textAfterCursor = value.substring(textarea.selectionEnd);
           if (!textAfterCursor.includes('\n')) {
-            // Cursor is on the last line — navigate history
             e.preventDefault();
             onNavigateDown?.();
-            // Don't call onChange — Terminal handles the state update directly
           }
         }
       }
     },
-    [value, onSubmit, onChange, ghostText, onNavigateUp, onNavigateDown, onTab],
+    [value, onSubmit, onChange, ghostText, onNavigateUp, onNavigateDown, onTab, syncSelection],
   );
 
-  const handleCursorChange = useCallback(() => {
-    if (onCursorChange && textareaRef.current) {
-      onCursorChange(textareaRef.current.selectionStart);
-    }
-  }, [onCursorChange, textareaRef]);
+  const overlayContent = useMemo(
+    () => buildOverlayContent(tokens, cursorPosRef.current, selStartRef.current, selEndRef.current),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refs read during render, tick forces recalc
+    [tokens, cursorPosRef.current, selStartRef.current, selEndRef.current],
+  );
 
   return (
     <div className="input-editor" data-testid="input-editor">
@@ -108,11 +224,7 @@ function InputEditor({ value, onChange, onSubmit, disabled, ghostText, onNavigat
       <span className="editor-prompt">{'\u276F'}</span>
       <div className="editor-area">
         <pre className="editor-highlight" aria-hidden="true">
-          {tokens.map((token, i) => (
-            <span key={i} className={`token-${token.type}`}>
-              {token.value}
-            </span>
-          ))}
+          {overlayContent}
           {ghostText && <span className="ghost-text">{ghostText}</span>}
           {'\n'}
         </pre>
@@ -123,16 +235,19 @@ function InputEditor({ value, onChange, onSubmit, disabled, ghostText, onNavigat
           value={value}
           onChange={(e) => {
             onChange(e.target.value);
-            // Fire cursor change immediately on input so completion context
-            // uses the actual cursor position, not a stale value
+            const pos = e.target.selectionStart;
+            const end = e.target.selectionEnd;
+            cursorPosRef.current = pos;
+            selStartRef.current = pos;
+            selEndRef.current = end;
             if (onCursorChange) {
-              const pos = e.target.selectionStart;
               onCursorChange(pos);
             }
           }}
           onKeyDown={handleKeyDown}
-          onKeyUp={handleCursorChange}
-          onClick={handleCursorChange}
+          onKeyUp={syncSelection}
+          onClick={syncSelection}
+          onMouseUp={syncSelection}
           rows={1}
           disabled={disabled}
           autoFocus
