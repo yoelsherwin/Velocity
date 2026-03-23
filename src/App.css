@@ -912,6 +912,23 @@ html, body, #root {
   white-space: pre;
 }
 
+.terminal-grid-cursor {
+  background-color: var(--text-primary);
+  color: var(--bg-base);
+  animation: terminal-cursor-blink 1s step-end infinite;
+}
+
+@keyframes terminal-cursor-blink {
+  0%, 100% {
+    background-color: var(--text-primary);
+    color: var(--bg-base);
+  }
+  50% {
+    background-color: transparent;
+    color: inherit;
+  }
+}
+
 /* --- Command Palette Styles --- */
 
 .palette-overlay {

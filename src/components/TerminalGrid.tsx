@@ -14,9 +14,19 @@ export interface GridRow {
   cells: GridCell[];
 }
 
+export interface GridUpdatePayload {
+  rows: GridRow[];
+  cursor_row: number;
+  cursor_col: number;
+  cursor_visible: boolean;
+}
+
 interface TerminalGridProps {
   rows: GridRow[];
   onKeyDown: (e: React.KeyboardEvent) => void;
+  cursorRow?: number;
+  cursorCol?: number;
+  cursorVisible?: boolean;
 }
 
 /** Style for a single grid cell */
@@ -31,19 +41,32 @@ function cellStyle(cell: GridCell): React.CSSProperties {
   };
 }
 
-const GridRowMemo = React.memo(function GridRowComponent({ row }: { row: GridRow }) {
+const GridRowMemo = React.memo(function GridRowComponent({
+  row,
+  cursorCol,
+}: {
+  row: GridRow;
+  cursorCol?: number;
+}) {
   return (
     <div className="terminal-grid-row">
-      {row.cells.map((cell, colIdx) => (
-        <span key={colIdx} style={cellStyle(cell)}>
-          {cell.content || ' '}
-        </span>
-      ))}
+      {row.cells.map((cell, colIdx) => {
+        const isCursor = cursorCol === colIdx;
+        return (
+          <span
+            key={colIdx}
+            style={cellStyle(cell)}
+            className={isCursor ? 'terminal-grid-cursor' : undefined}
+          >
+            {cell.content || ' '}
+          </span>
+        );
+      })}
     </div>
   );
 });
 
-function TerminalGrid({ rows, onKeyDown }: TerminalGridProps) {
+function TerminalGrid({ rows, onKeyDown, cursorRow, cursorCol, cursorVisible }: TerminalGridProps) {
   const gridRef = useRef<HTMLDivElement>(null);
 
   // Auto-focus the grid so it captures keyboard input
@@ -61,6 +84,9 @@ function TerminalGrid({ rows, onKeyDown }: TerminalGridProps) {
     }, 10);
   }, []);
 
+  // Only show cursor if explicitly visible and position is defined
+  const showCursor = cursorVisible === true && cursorRow != null && cursorCol != null;
+
   return (
     <div
       ref={gridRef}
@@ -71,7 +97,11 @@ function TerminalGrid({ rows, onKeyDown }: TerminalGridProps) {
       onBlur={handleBlur}
     >
       {rows.map((row, rowIdx) => (
-        <GridRowMemo key={rowIdx} row={row} />
+        <GridRowMemo
+          key={rowIdx}
+          row={row}
+          cursorCol={showCursor && rowIdx === cursorRow ? cursorCol : undefined}
+        />
       ))}
     </div>
   );
