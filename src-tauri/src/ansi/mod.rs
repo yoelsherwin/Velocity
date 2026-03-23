@@ -161,6 +161,15 @@ fn ansi_idx_to_css(idx: u8) -> String {
     format!("rgb({},{},{})", level, level, level)
 }
 
+/// Payload for a grid update event, including cursor state.
+#[derive(Debug, Clone, serde::Serialize, PartialEq)]
+pub struct GridUpdatePayload {
+    pub rows: Vec<GridRow>,
+    pub cursor_row: u16,
+    pub cursor_col: u16,
+    pub cursor_visible: bool,
+}
+
 /// Extract the full grid state from a vt100 screen.
 pub fn extract_grid(screen: &vt100::Screen, rows: u16, cols: u16) -> Vec<GridRow> {
     let mut grid = Vec::with_capacity(rows as usize);
@@ -296,6 +305,18 @@ impl TerminalEmulator {
     /// Extract the current grid state from the vt100 screen.
     pub fn extract_grid(&self) -> Vec<GridRow> {
         extract_grid(self.parser.screen(), self.rows, self.cols)
+    }
+
+    /// Extract the current grid state with cursor position and visibility.
+    pub fn extract_grid_with_cursor(&self) -> GridUpdatePayload {
+        let screen = self.parser.screen();
+        let (cursor_row, cursor_col) = screen.cursor_position();
+        GridUpdatePayload {
+            rows: extract_grid(screen, self.rows, self.cols),
+            cursor_row,
+            cursor_col,
+            cursor_visible: !screen.hide_cursor(),
+        }
     }
 
     /// Get the current terminal dimensions.
@@ -787,6 +808,78 @@ mod tests {
         let grid = emu.extract_grid();
         assert_eq!(grid[0].cells[0].content, "H");
         assert_eq!(grid[0].cells[1].content, "e");
+    }
+
+    // ---- Cursor extraction tests ----
+
+    #[test]
+    fn test_extract_grid_with_cursor_default_position() {
+        let emu = TerminalEmulator::new(24, 80);
+        let payload = emu.extract_grid_with_cursor();
+        assert_eq!(payload.cursor_row, 0);
+        assert_eq!(payload.cursor_col, 0);
+        assert!(payload.cursor_visible, "Cursor should be visible by default");
+        assert_eq!(payload.rows.len(), 24);
+    }
+
+    #[test]
+    fn test_extract_grid_with_cursor_after_text() {
+        let mut emu = TerminalEmulator::new(24, 80);
+        emu.process(b"Hello");
+        let payload = emu.extract_grid_with_cursor();
+        assert_eq!(payload.cursor_row, 0);
+        assert_eq!(payload.cursor_col, 5);
+        assert!(payload.cursor_visible);
+    }
+
+    #[test]
+    fn test_extract_grid_with_cursor_after_newline() {
+        let mut emu = TerminalEmulator::new(24, 80);
+        // In raw terminal mode, \n moves down but doesn't reset column.
+        // Use \r\n for carriage return + newline behavior.
+        emu.process(b"Hello\r\nWorld");
+        let payload = emu.extract_grid_with_cursor();
+        assert_eq!(payload.cursor_row, 1);
+        assert_eq!(payload.cursor_col, 5);
+    }
+
+    #[test]
+    fn test_extract_grid_with_cursor_after_cursor_move() {
+        let mut emu = TerminalEmulator::new(24, 80);
+        // Move cursor to row 5, col 10 (1-based in ANSI, 0-based in vt100)
+        emu.process(b"\x1b[6;11H");
+        let payload = emu.extract_grid_with_cursor();
+        assert_eq!(payload.cursor_row, 5);
+        assert_eq!(payload.cursor_col, 10);
+    }
+
+    #[test]
+    fn test_extract_grid_with_cursor_hidden() {
+        let mut emu = TerminalEmulator::new(24, 80);
+        // Hide cursor: CSI ?25l
+        emu.process(b"\x1b[?25l");
+        let payload = emu.extract_grid_with_cursor();
+        assert!(!payload.cursor_visible, "Cursor should be hidden after ?25l");
+    }
+
+    #[test]
+    fn test_extract_grid_with_cursor_show_after_hide() {
+        let mut emu = TerminalEmulator::new(24, 80);
+        emu.process(b"\x1b[?25l"); // hide
+        emu.process(b"\x1b[?25h"); // show
+        let payload = emu.extract_grid_with_cursor();
+        assert!(payload.cursor_visible, "Cursor should be visible after ?25h");
+    }
+
+    #[test]
+    fn test_extract_grid_with_cursor_in_alt_screen() {
+        let mut emu = TerminalEmulator::new(24, 80);
+        emu.process(b"\x1b[?1049h"); // enter alt screen
+        emu.process(b"\x1b[5;10HText");
+        let payload = emu.extract_grid_with_cursor();
+        assert_eq!(payload.cursor_row, 4); // 0-based
+        assert_eq!(payload.cursor_col, 13); // 10-1 + 4 chars of "Text"
+        assert!(payload.cursor_visible);
     }
 
     /// Helper: assert that a string contains only text and SGR escape sequences.

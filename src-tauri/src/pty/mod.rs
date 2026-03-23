@@ -1,4 +1,4 @@
-use crate::ansi::{GridRow, TerminalEmulator, TerminalOutput};
+use crate::ansi::{GridUpdatePayload, TerminalEmulator, TerminalOutput};
 use portable_pty::{CommandBuilder, MasterPty, PtySize, Child, native_pty_system};
 use std::collections::HashMap;
 use std::io::{Read, Write};
@@ -28,8 +28,8 @@ pub enum PtyEvent {
     AltScreenEnter { rows: u16, cols: u16 },
     /// Alternate screen exited — switch back to block rendering mode
     AltScreenExit,
-    /// Grid state update while in alternate screen mode
-    GridUpdate(Vec<GridRow>),
+    /// Grid state update while in alternate screen mode (includes cursor info)
+    GridUpdate(GridUpdatePayload),
     /// Read error from the PTY
     Error(String),
     /// Reader thread ended (process exited or PTY closed)
@@ -136,7 +136,7 @@ fn spawn_reader_thread(
                                 let (rows, cols) = emu.dimensions();
                                 evts.push(PtyEvent::AltScreenEnter { rows, cols });
                                 // Send initial grid state immediately
-                                evts.push(PtyEvent::GridUpdate(emu.extract_grid()));
+                                evts.push(PtyEvent::GridUpdate(emu.extract_grid_with_cursor()));
                                 last_grid_send = std::time::Instant::now();
                             } else {
                                 evts.push(PtyEvent::AltScreenExit);
@@ -153,7 +153,7 @@ fn spawn_reader_thread(
                             // While in alt screen, send throttled grid updates
                             let now = std::time::Instant::now();
                             if now.duration_since(last_grid_send) >= grid_throttle {
-                                evts.push(PtyEvent::GridUpdate(emu.extract_grid()));
+                                evts.push(PtyEvent::GridUpdate(emu.extract_grid_with_cursor()));
                                 last_grid_send = now;
                             }
                         } else {
@@ -309,9 +309,9 @@ fn spawn_bridge_thread(
                         eprintln!("[pty:{}] Failed to emit alt-screen-exit: {}", session_id, e);
                     }
                 }
-                PtyEvent::GridUpdate(rows) => {
+                PtyEvent::GridUpdate(payload) => {
                     if let Err(e) =
-                        app_handle.emit(&format!("pty:grid-update:{}", session_id), rows)
+                        app_handle.emit(&format!("pty:grid-update:{}", session_id), payload)
                     {
                         eprintln!("[pty:{}] Failed to emit grid-update: {}", session_id, e);
                     }
@@ -837,7 +837,12 @@ mod tests {
         let output_replace = PtyEvent::OutputReplace("replaced".to_string());
         let alt_enter = PtyEvent::AltScreenEnter { rows: 24, cols: 80 };
         let alt_exit = PtyEvent::AltScreenExit;
-        let grid_update = PtyEvent::GridUpdate(vec![]);
+        let grid_update = PtyEvent::GridUpdate(GridUpdatePayload {
+            rows: vec![],
+            cursor_row: 0,
+            cursor_col: 0,
+            cursor_visible: true,
+        });
         let error = PtyEvent::Error("something went wrong".to_string());
         let closed = PtyEvent::Closed;
 
