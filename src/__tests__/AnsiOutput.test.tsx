@@ -131,4 +131,68 @@ describe('AnsiOutput Component', () => {
     const current = container.querySelectorAll('.search-highlight-current');
     expect(current.length).toBe(1);
   });
+
+  // --- Task 039: Text decoration tests ---
+
+  it('test_strikethrough_renders', () => {
+    // SGR 9 = strikethrough
+    const { container } = render(<AnsiOutput text={'\x1b[9mstruck\x1b[0m'} />);
+    const spans = container.querySelectorAll('span');
+    const struckSpan = Array.from(spans).find(
+      (s) => s.textContent === 'struck',
+    );
+    expect(struckSpan).toBeDefined();
+    expect(struckSpan!.style.textDecoration).toContain('line-through');
+  });
+
+  it('test_combined_bold_italic', () => {
+    // SGR 1 = bold, SGR 3 = italic
+    const { container } = render(<AnsiOutput text={'\x1b[1;3mbolditalic\x1b[0m'} />);
+    const spans = container.querySelectorAll('span');
+    const biSpan = Array.from(spans).find(
+      (s) => s.textContent === 'bolditalic',
+    );
+    expect(biSpan).toBeDefined();
+    expect(biSpan!.style.fontWeight).toBe('bold');
+    expect(biSpan!.style.fontStyle).toBe('italic');
+  });
+
+  it('test_combined_underline_strikethrough', () => {
+    // SGR 4 = underline, SGR 9 = strikethrough
+    const { container } = render(<AnsiOutput text={'\x1b[4;9mboth\x1b[0m'} />);
+    const spans = container.querySelectorAll('span');
+    const bothSpan = Array.from(spans).find(
+      (s) => s.textContent === 'both',
+    );
+    expect(bothSpan).toBeDefined();
+    expect(bothSpan!.style.textDecoration).toContain('underline');
+    expect(bothSpan!.style.textDecoration).toContain('line-through');
+  });
+
+  it('test_dim_with_color', () => {
+    // SGR 2 = dim, SGR 31 = red fg
+    const { container } = render(<AnsiOutput text={'\x1b[2;31mdimred\x1b[0m'} />);
+    const spans = container.querySelectorAll('span');
+    const dimRedSpan = Array.from(spans).find(
+      (s) => s.textContent === 'dimred',
+    );
+    expect(dimRedSpan).toBeDefined();
+    expect(dimRedSpan!.style.opacity).toBe('0.5');
+    expect(dimRedSpan!.style.color).toBeTruthy();
+  });
+
+  it('test_all_decorations_combined', () => {
+    // SGR 1=bold, 2=dim, 3=italic, 4=underline, 9=strikethrough
+    const { container } = render(<AnsiOutput text={'\x1b[1;2;3;4;9mall\x1b[0m'} />);
+    const spans = container.querySelectorAll('span');
+    const allSpan = Array.from(spans).find(
+      (s) => s.textContent === 'all',
+    );
+    expect(allSpan).toBeDefined();
+    expect(allSpan!.style.fontWeight).toBe('bold');
+    expect(allSpan!.style.fontStyle).toBe('italic');
+    expect(allSpan!.style.textDecoration).toContain('underline');
+    expect(allSpan!.style.textDecoration).toContain('line-through');
+    expect(allSpan!.style.opacity).toBe('0.5');
+  });
 });

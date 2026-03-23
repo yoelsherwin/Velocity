@@ -54,6 +54,23 @@ describe('parseAnsi', () => {
     expect(orangeSpan!.fg).toBeDefined();
     expect(orangeSpan!.fg).toContain('255');
   });
+
+  it('test_parseAnsi_strikethrough', () => {
+    const result = parseAnsi('\x1b[9mstruck\x1b[0m');
+    const struckSpan = result.find((s) => s.content === 'struck');
+    expect(struckSpan).toBeDefined();
+    expect(struckSpan!.strikethrough).toBe(true);
+  });
+
+  it('test_parseAnsi_combined_decorations', () => {
+    const result = parseAnsi('\x1b[1;3;4;9mdecorated\x1b[0m');
+    const span = result.find((s) => s.content === 'decorated');
+    expect(span).toBeDefined();
+    expect(span!.bold).toBe(true);
+    expect(span!.italic).toBe(true);
+    expect(span!.underline).toBe(true);
+    expect(span!.strikethrough).toBe(true);
+  });
 });
 
 describe('stripAnsi', () => {

@@ -22,12 +22,16 @@ interface AnsiOutputProps {
 
 /** Style object for a single ANSI span */
 function spanStyle(span: AnsiSpan): React.CSSProperties {
+  const decorations: string[] = [];
+  if (span.underline) decorations.push('underline');
+  if (span.strikethrough) decorations.push('line-through');
+
   return {
     color: span.fg,
     backgroundColor: span.bg,
     fontWeight: span.bold ? 'bold' : undefined,
     fontStyle: span.italic ? 'italic' : undefined,
-    textDecoration: span.underline ? 'underline' : undefined,
+    textDecoration: decorations.length > 0 ? decorations.join(' ') : undefined,
     opacity: span.dim ? 0.5 : undefined,
   };
 }
