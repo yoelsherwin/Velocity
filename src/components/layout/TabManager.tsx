@@ -43,6 +43,12 @@ function TabManager() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
 
+  // Map of tabId -> fallback title (e.g. "Terminal 1"), used when no CWD is available
+  const fallbackTitlesRef = useRef<Map<string, string>>(new Map([[tabs[0].id, tabs[0].title]]));
+
+  // Map of paneId -> latest dynamic title reported by that pane's Terminal
+  const paneTitlesRef = useRef<Map<string, string>>(new Map());
+
   // Derive focusedPaneId from the active tab
   const activeTab = tabs.find((t) => t.id === activeTabId);
   const focusedPaneId = activeTab?.focusedPaneId ?? null;
@@ -85,6 +91,7 @@ function TabManager() {
       paneRoot: { type: 'leaf', id: initialPaneId },
       focusedPaneId: initialPaneId,
     };
+    fallbackTitlesRef.current.set(newTab.id, newTab.title);
     setTabs((prev) => [...prev, newTab]);
     updateActiveTabId(newTab.id);
   }, [updateActiveTabId]);
@@ -115,9 +122,16 @@ function TabManager() {
   const handleFocusPane = useCallback(
     (paneId: string) => {
       setTabs((prev) =>
-        prev.map((t) =>
-          t.id === activeTabIdRef.current ? { ...t, focusedPaneId: paneId } : t,
-        ),
+        prev.map((t) => {
+          if (t.id !== activeTabIdRef.current) return t;
+          const updated = { ...t, focusedPaneId: paneId };
+          // Update tab title to the newly focused pane's title
+          const paneTitle = paneTitlesRef.current.get(paneId);
+          if (paneTitle) {
+            updated.title = paneTitle;
+          }
+          return updated;
+        }),
       );
     },
     [],
@@ -178,6 +192,29 @@ function TabManager() {
         prev.map((t) =>
           t.id === tabId ? { ...t, paneRoot: updatePaneRatio(t.paneRoot, splitId, newRatio) } : t,
         ),
+      );
+    },
+    [],
+  );
+
+  /**
+   * Handle title change from a pane's Terminal.
+   * Updates the tab title if the reporting pane is the tab's focused pane.
+   */
+  const handleTitleChange = useCallback(
+    (tabId: string, paneId: string, title: string) => {
+      // Store the pane's latest title
+      paneTitlesRef.current.set(paneId, title);
+      // Update the tab title if this pane is the tab's focused pane
+      setTabs((prev) =>
+        prev.map((tab) => {
+          if (tab.id !== tabId) return tab;
+          if (tab.focusedPaneId !== paneId) return tab;
+          const fallback = fallbackTitlesRef.current.get(tabId) ?? tab.title;
+          const newTitle = title || fallback;
+          if (tab.title === newTitle) return tab;
+          return { ...tab, title: newTitle };
+        }),
       );
     },
     [],
@@ -333,6 +370,7 @@ function TabManager() {
               onSplitPane={(paneId, dir) => handleSplitPane(tab.id, paneId, dir)}
               onClosePane={(paneId) => handleClosePane(tab.id, paneId)}
               onResizePane={(splitId, newRatio) => handleResizePane(tab.id, splitId, newRatio)}
+              onTitleChange={(paneId, title) => handleTitleChange(tab.id, paneId, title)}
               isOnlyPane={countLeaves(tab.paneRoot) === 1}
             />
           </div>

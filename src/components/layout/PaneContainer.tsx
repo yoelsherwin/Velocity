@@ -9,6 +9,7 @@ interface PaneContainerProps {
   onSplitPane: (paneId: string, direction: PaneDirection) => void;
   onClosePane: (paneId: string) => void;
   onResizePane?: (splitId: string, newRatio: number) => void;
+  onTitleChange?: (paneId: string, title: string) => void;
   isOnlyPane: boolean;
 }
 
@@ -64,6 +65,7 @@ interface SplitPaneProps {
   onSplitPane: (paneId: string, direction: PaneDirection) => void;
   onClosePane: (paneId: string) => void;
   onResizePane: (splitId: string, newRatio: number) => void;
+  onTitleChange?: (paneId: string, title: string) => void;
   isOnlyPane: boolean;
 }
 
@@ -74,6 +76,7 @@ function SplitPane({
   onSplitPane,
   onClosePane,
   onResizePane,
+  onTitleChange,
   isOnlyPane,
 }: SplitPaneProps) {
   const { containerRef, handleMouseDown } = usePaneDrag(node.id, node.direction, onResizePane);
@@ -94,6 +97,7 @@ function SplitPane({
           onSplitPane={onSplitPane}
           onClosePane={onClosePane}
           onResizePane={onResizePane}
+          onTitleChange={onTitleChange}
           isOnlyPane={isOnlyPane}
         />
       </div>
@@ -106,6 +110,7 @@ function SplitPane({
           onSplitPane={onSplitPane}
           onClosePane={onClosePane}
           onResizePane={onResizePane}
+          onTitleChange={onTitleChange}
           isOnlyPane={isOnlyPane}
         />
       </div>
@@ -120,6 +125,7 @@ function PaneContainer({
   onSplitPane,
   onClosePane,
   onResizePane,
+  onTitleChange,
   isOnlyPane,
 }: PaneContainerProps) {
   if (node.type === 'leaf') {
@@ -129,7 +135,7 @@ function PaneContainer({
         onClick={() => onFocusPane(node.id)}
         data-testid={`pane-${node.id}`}
       >
-        <Terminal key={node.id} paneId={node.id} />
+        <Terminal key={node.id} paneId={node.id} onTitleChange={onTitleChange ? (title: string) => onTitleChange(node.id, title) : undefined} />
         <div className="pane-actions">
           <button
             className="pane-action-btn"
@@ -177,6 +183,7 @@ function PaneContainer({
       onSplitPane={onSplitPane}
       onClosePane={onClosePane}
       onResizePane={onResizePane ?? noopResize}
+      onTitleChange={onTitleChange}
       isOnlyPane={isOnlyPane}
     />
   );

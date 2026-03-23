@@ -12,6 +12,7 @@ import { getGitInfo, type GitInfo } from '../lib/git';
 import { stripAnsi } from '../lib/ansi';
 import { showCommandNotification, sendTestNotification } from '../lib/notifications';
 import { encodeKey } from '../lib/key-encoder';
+import { computeTabTitle } from '../lib/tab-title';
 import { useKnownCommands } from '../hooks/useKnownCommands';
 import BlockView from './blocks/BlockView';
 import InputEditor from './editor/InputEditor';
@@ -48,9 +49,10 @@ function createBlock(command: string, shellType: ShellType): Block {
 
 interface TerminalProps {
   paneId?: string;
+  onTitleChange?: (title: string) => void;
 }
 
-function Terminal({ paneId }: TerminalProps) {
+function Terminal({ paneId, onTitleChange }: TerminalProps) {
   const sessionIdRef = useRef<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [shellType, setShellType] = useState<ShellType>('powershell');
@@ -80,6 +82,7 @@ function Terminal({ paneId }: TerminalProps) {
   const [cursorPos, setCursorPos] = useState(0);
   const [cwd, setCwd] = useState('C:\\');
   const [gitInfo, setGitInfo] = useState<GitInfo | null>(null);
+  const [runningCommand, setRunningCommand] = useState<string | null>(null);
 
   const { history, addCommand, navigateUp, navigateDown, reset, setDraft } = useCommandHistory();
   const completions = useCompletions(input, cursorPos, history, knownCommands, cwd);
@@ -88,6 +91,20 @@ function Terminal({ paneId }: TerminalProps) {
   const [historySearchOpen, setHistorySearchOpen] = useState(false);
   const savedInputRef = useRef('');
   const [hasApiKey, setHasApiKey] = useState(false);
+
+  // Keep a stable ref for onTitleChange to avoid re-triggering the effect
+  const onTitleChangeRef = useRef(onTitleChange);
+  onTitleChangeRef.current = onTitleChange;
+
+  // Emit tab title changes when CWD or running command changes
+  useEffect(() => {
+    if (onTitleChangeRef.current) {
+      const title = computeTabTitle(cwd, runningCommand, '');
+      if (title) {
+        onTitleChangeRef.current(title);
+      }
+    }
+  }, [cwd, runningCommand]);
 
   // Determine the most recently failed block (for error suggestion)
   const mostRecentFailedBlockId = useMemo(() => {
@@ -180,6 +197,7 @@ function Terminal({ paneId }: TerminalProps) {
             // `cd`) is not directly observable from the parent process, so this
             // returns the Tauri process CWD which may differ from the shell's CWD.
             if (commandCompleted) {
+              setRunningCommand(null);
               getCwd().then((dir) => {
                 setCwd(dir);
                 getGitInfo(dir).then(setGitInfo).catch(() => setGitInfo(null));
@@ -226,6 +244,7 @@ function Terminal({ paneId }: TerminalProps) {
               }),
             );
             if (commandCompleted) {
+              setRunningCommand(null);
               getCwd().then((dir) => {
                 setCwd(dir);
                 getGitInfo(dir).then(setGitInfo).catch(() => setGitInfo(null));
@@ -470,6 +489,7 @@ function Terminal({ paneId }: TerminalProps) {
           : withNew;
       });
       activeBlockIdRef.current = newBlock.id;
+      setRunningCommand(command);
       // Auto-expand the new running block if it was somehow collapsed,
       // and prune IDs of blocks that were evicted by MAX_BLOCKS
       setCollapsedBlocks((prev) => {
