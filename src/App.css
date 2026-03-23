@@ -329,7 +329,7 @@ html, body, #root {
   resize: none;
   background: transparent;
   color: transparent;
-  caret-color: var(--text-primary);
+  caret-color: transparent;
   outline: none;
   z-index: 1;
 }
@@ -347,6 +347,32 @@ html, body, #root {
 .token-pipe { color: var(--syntax-pipe); }
 .token-argument { color: var(--syntax-argument); }
 .token-whitespace { /* inherits */ }
+
+/* IDE Cursor — custom blinking cursor in the syntax-highlight overlay */
+.editor-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1.2em;
+  background-color: var(--text-primary);
+  vertical-align: text-bottom;
+  margin: 0 -1px;
+  pointer-events: none;
+}
+
+.editor-cursor-blink {
+  animation: cursor-blink 1s step-end infinite;
+}
+
+@keyframes cursor-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* Selection highlight in overlay */
+.editor-selection {
+  background-color: var(--selection-bg);
+  border-radius: 1px;
+}
 
 /* Ghost text — faded type-ahead suggestion */
 .ghost-text {
