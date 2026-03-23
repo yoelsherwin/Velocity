@@ -121,6 +121,11 @@ html, body, #root {
   padding-left: 6px;
 }
 
+.block-container.block-focused {
+  border-left: 2px solid #89b4fa;
+  padding-left: 6px;
+}
+
 .block-header {
   display: flex;
   align-items: center;

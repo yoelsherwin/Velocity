@@ -56,6 +56,7 @@ function Terminal({ paneId }: TerminalProps) {
   const [input, setInput] = useState('');
   const [closed, setClosed] = useState(false);
   const [altScreenActive, setAltScreenActive] = useState(false);
+  const [focusedBlockIndex, setFocusedBlockIndex] = useState(-1);
   const [gridRows, setGridRows] = useState<GridRow[]>([]);
   const [agentLoading, setAgentLoading] = useState(false);
   const [agentError, setAgentError] = useState<string | null>(null);
@@ -502,6 +503,8 @@ function Terminal({ paneId }: TerminalProps) {
       addCommand(trimmed);
       submitCommand(trimmed);
       setInput('');
+      // Reset block navigation focus on submit
+      setFocusedBlockIndex(-1);
       // Reset mode override after submit
       setModeOverride(false);
       setInputMode({ intent: 'cli', confidence: 'high' });
@@ -514,6 +517,8 @@ function Terminal({ paneId }: TerminalProps) {
       setInput(newValue);
       setDraft(newValue);
       reset();
+      // Reset block navigation focus on input
+      setFocusedBlockIndex(-1);
       // Clear agent error when user starts typing
       setAgentError(null);
       // Auto-classify on input change (unless user has manually overridden)
@@ -588,6 +593,43 @@ function Terminal({ paneId }: TerminalProps) {
     },
     [],
   );
+
+  // Block navigation: Ctrl+Up/Down (document-level, like Ctrl+Shift+F)
+  useEffect(() => {
+    const handleBlockNav = (e: KeyboardEvent) => {
+      if (!e.ctrlKey || e.shiftKey || e.altKey || e.metaKey) return;
+
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setFocusedBlockIndex((prev) => {
+          const maxIndex = blocksRef.current.length - 1;
+          if (maxIndex < 0) return -1;
+          if (prev === -1) return 0;
+          return Math.min(prev + 1, maxIndex);
+        });
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setFocusedBlockIndex((prev) => {
+          const maxIndex = blocksRef.current.length - 1;
+          if (maxIndex < 0) return -1;
+          if (prev === -1) return maxIndex;
+          return Math.max(prev - 1, 0);
+        });
+      }
+    };
+
+    document.addEventListener('keydown', handleBlockNav);
+    return () => document.removeEventListener('keydown', handleBlockNav);
+  }, []);
+
+  // Scroll focused block into view
+  useEffect(() => {
+    if (focusedBlockIndex < 0) return;
+    const containers = document.querySelectorAll('[data-testid="block-container"]');
+    if (containers[focusedBlockIndex]) {
+      containers[focusedBlockIndex].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }, [focusedBlockIndex]);
 
   // Ref for the search input element, passed to SearchBar
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -664,6 +706,22 @@ function Terminal({ paneId }: TerminalProps) {
           }
           break;
         }
+        case 'block.prev':
+          setFocusedBlockIndex((prev) => {
+            const maxIndex = blocksRef.current.length - 1;
+            if (maxIndex < 0) return -1;
+            if (prev === -1) return maxIndex;
+            return Math.max(prev - 1, 0);
+          });
+          break;
+        case 'block.next':
+          setFocusedBlockIndex((prev) => {
+            const maxIndex = blocksRef.current.length - 1;
+            if (maxIndex < 0) return -1;
+            if (prev === -1) return 0;
+            return Math.min(prev + 1, maxIndex);
+          });
+          break;
         case 'search.find':
           if (search.isOpen) {
             searchInputRef.current?.focus();
@@ -780,11 +838,12 @@ function Terminal({ paneId }: TerminalProps) {
             onClose={handleSearchClose}
             inputRef={searchInputRef}
           />
-          {blocks.map((block) => (
+          {blocks.map((block, index) => (
             <BlockView
               key={block.id}
               block={block}
               isActive={block.id === activeBlockIdRef.current}
+              isFocused={index === focusedBlockIndex}
               onRerun={handleRerun}
               isVisible={visibleIds.has(block.id)}
               observeRef={(el) => observeBlock(block.id, el)}

@@ -12,6 +12,8 @@ export const COMMANDS: Command[] = [
   { id: 'pane.splitRight', title: 'Split Pane Right', shortcut: 'Ctrl+Shift+Right', category: 'Pane', keywords: ['horizontal', 'divide'] },
   { id: 'pane.splitDown', title: 'Split Pane Down', shortcut: 'Ctrl+Shift+Down', category: 'Pane', keywords: ['vertical', 'divide'] },
   { id: 'pane.close', title: 'Close Pane', shortcut: 'Ctrl+Shift+W', category: 'Pane', keywords: ['remove', 'delete'] },
+  { id: 'block.prev', title: 'Previous Block', shortcut: 'Ctrl+Up', category: 'Navigation', keywords: ['navigate', 'scroll', 'block'] },
+  { id: 'block.next', title: 'Next Block', shortcut: 'Ctrl+Down', category: 'Navigation', keywords: ['navigate', 'scroll', 'block'] },
   { id: 'search.find', title: 'Find in Output', shortcut: 'Ctrl+Shift+F', category: 'Search', keywords: ['search', 'grep'] },
   { id: 'settings.open', title: 'Open Settings', category: 'Settings', keywords: ['preferences', 'config'] },
   { id: 'shell.powershell', title: 'Switch to PowerShell', category: 'Terminal', keywords: ['shell'] },

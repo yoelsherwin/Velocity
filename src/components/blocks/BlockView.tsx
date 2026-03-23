@@ -7,13 +7,14 @@ import { estimateBlockHeight } from '../../hooks/useBlockVisibility';
 interface BlockViewProps {
   block: Block;
   isActive: boolean;        // true if this is the currently running block
+  isFocused?: boolean;      // true if this block is focused via Ctrl+Up/Down navigation
   onRerun: (command: string) => void;
   isVisible?: boolean;      // true if block is in or near the viewport
   observeRef?: (el: HTMLDivElement | null) => void;  // callback ref for IntersectionObserver
   highlights?: HighlightRange[];  // search match highlights for this block
 }
 
-function BlockView({ block, isActive, onRerun, isVisible = true, observeRef, highlights }: BlockViewProps) {
+function BlockView({ block, isActive, isFocused = false, onRerun, isVisible = true, observeRef, highlights }: BlockViewProps) {
   const formattedTime = useMemo(() => {
     return new Date(block.timestamp).toLocaleTimeString();
   }, [block.timestamp]);
@@ -39,7 +40,7 @@ function BlockView({ block, isActive, onRerun, isVisible = true, observeRef, hig
   return (
     <div
       ref={observeRef}
-      className={`block-container ${isActive && block.status === 'running' ? 'block-active' : ''}`}
+      className={`block-container ${isActive && block.status === 'running' ? 'block-active' : ''} ${isFocused ? 'block-focused' : ''}`}
       data-testid="block-container"
     >
       {!isWelcome && (
