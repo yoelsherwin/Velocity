@@ -16,19 +16,17 @@ pub struct AppSettings {
     #[serde(default)]
     pub theme: Option<String>,
     #[serde(default)]
-<<<<<<< HEAD
     pub cursor_shape: Option<String>,
     #[serde(default = "default_auto_detect_nl")]
     pub auto_detect_nl: Option<bool>,
+    #[serde(default)]
+    pub background_effect: Option<String>,
+    #[serde(default)]
+    pub background_opacity: Option<f64>,
 }
 
 fn default_auto_detect_nl() -> Option<bool> {
     Some(true)
-=======
-    pub background_effect: Option<String>,
-    #[serde(default)]
-    pub background_opacity: Option<f64>,
->>>>>>> worktree-agent-a7ef51a1
 }
 
 impl Default for AppSettings {
@@ -42,13 +40,10 @@ impl Default for AppSettings {
             font_size: None,
             line_height: None,
             theme: None,
-<<<<<<< HEAD
             cursor_shape: None,
             auto_detect_nl: Some(true),
-=======
             background_effect: None,
             background_opacity: None,
->>>>>>> worktree-agent-a7ef51a1
         }
     }
 }
@@ -56,13 +51,11 @@ impl Default for AppSettings {
 /// Valid LLM provider identifiers.
 const VALID_PROVIDERS: &[&str] = &["openai", "anthropic", "google", "azure"];
 
-<<<<<<< HEAD
 /// Valid cursor shape identifiers.
 const VALID_CURSOR_SHAPES: &[&str] = &["bar", "block", "underline"];
-=======
+
 /// Valid background effect identifiers.
 const VALID_BACKGROUND_EFFECTS: &[&str] = &["none", "transparent", "acrylic", "mica"];
->>>>>>> worktree-agent-a7ef51a1
 
 /// Valid built-in theme identifiers.
 const VALID_THEMES: &[&str] = &[
@@ -167,11 +160,12 @@ pub fn validate_settings(settings: &AppSettings) -> Result<(), String> {
         }
     }
 
-<<<<<<< HEAD
     if let Some(ref shape) = settings.cursor_shape {
         if !VALID_CURSOR_SHAPES.contains(&shape.as_str()) {
             return Err(format!("Invalid cursor shape: {}", shape));
-=======
+        }
+    }
+
     if let Some(ref effect) = settings.background_effect {
         if !VALID_BACKGROUND_EFFECTS.contains(&effect.as_str()) {
             return Err(format!("Invalid background effect: {}", effect));
@@ -184,7 +178,6 @@ pub fn validate_settings(settings: &AppSettings) -> Result<(), String> {
                 "Background opacity must be between 0.5 and 1.0, got {}",
                 opacity
             ));
->>>>>>> worktree-agent-a7ef51a1
         }
     }
 
@@ -227,13 +220,10 @@ mod tests {
             font_size: None,
             line_height: None,
             theme: None,
-<<<<<<< HEAD
             cursor_shape: None,
             auto_detect_nl: Some(true),
-=======
             background_effect: None,
             background_opacity: None,
->>>>>>> worktree-agent-a7ef51a1
         };
 
         let json = serde_json::to_string_pretty(&settings).unwrap();
@@ -253,13 +243,10 @@ mod tests {
             font_size: None,
             line_height: None,
             theme: None,
-<<<<<<< HEAD
             cursor_shape: None,
             auto_detect_nl: Some(true),
-=======
             background_effect: None,
             background_opacity: None,
->>>>>>> worktree-agent-a7ef51a1
         };
 
         let json = serde_json::to_string_pretty(&settings).unwrap();
@@ -415,13 +402,10 @@ mod tests {
             font_size: None,
             line_height: None,
             theme: None,
-<<<<<<< HEAD
             cursor_shape: None,
             auto_detect_nl: Some(true),
-=======
             background_effect: None,
             background_opacity: None,
->>>>>>> worktree-agent-a7ef51a1
         };
 
         // 7 rejected
@@ -456,13 +440,10 @@ mod tests {
             font_size: None,
             line_height: None,
             theme: None,
-<<<<<<< HEAD
             cursor_shape: None,
             auto_detect_nl: Some(true),
-=======
             background_effect: None,
             background_opacity: None,
->>>>>>> worktree-agent-a7ef51a1
         };
 
         // 0.9 rejected
@@ -497,13 +478,10 @@ mod tests {
             font_size: None,
             line_height: None,
             theme: None,
-<<<<<<< HEAD
             cursor_shape: None,
             auto_detect_nl: Some(true),
-=======
             background_effect: None,
             background_opacity: None,
->>>>>>> worktree-agent-a7ef51a1
         };
         assert!(validate_settings(&settings).is_err());
     }
@@ -532,13 +510,10 @@ mod tests {
                 font_size: None,
                 line_height: None,
                 theme: None,
-<<<<<<< HEAD
                 cursor_shape: None,
                 auto_detect_nl: Some(true),
-=======
                 background_effect: None,
                 background_opacity: None,
->>>>>>> worktree-agent-a7ef51a1
             };
             let result = validate_settings(&settings);
             assert!(result.is_err(), "Should reject font_family: {:?}", input);
@@ -569,13 +544,10 @@ mod tests {
                 font_size: None,
                 line_height: None,
                 theme: None,
-<<<<<<< HEAD
                 cursor_shape: None,
                 auto_detect_nl: Some(true),
-=======
                 background_effect: None,
                 background_opacity: None,
->>>>>>> worktree-agent-a7ef51a1
             };
             assert!(validate_settings(&settings).is_ok(), "Should accept font_family: {:?}", input);
         }
@@ -593,13 +565,10 @@ mod tests {
             font_size: None,
             line_height: None,
             theme: None,
-<<<<<<< HEAD
             cursor_shape: None,
             auto_detect_nl: Some(true),
-=======
             background_effect: None,
             background_opacity: None,
->>>>>>> worktree-agent-a7ef51a1
         };
         assert!(validate_settings(&settings).is_err());
     }
