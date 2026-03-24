@@ -223,4 +223,36 @@ describe('InputEditor Component', () => {
   });
 
   // Selection tests are in ideCursor.test.tsx to avoid OOM in single worker
+
+  // --- Task 049: Cursor shape tests ---
+
+  it('test_cursor_bar_shape', () => {
+    render(<InputEditor {...defaultProps} value="echo" />);
+    const editor = screen.getByTestId('input-editor');
+    const cursor = editor.querySelector('.editor-cursor');
+    expect(cursor).not.toBeNull();
+    // Default cursor should have bar class
+    expect(cursor!.classList.contains('editor-cursor-bar')).toBe(true);
+  });
+
+  it('test_cursor_block_shape', () => {
+    render(<InputEditor {...defaultProps} value="echo" cursorShape="block" />);
+    const editor = screen.getByTestId('input-editor');
+    const cursor = editor.querySelector('.editor-cursor');
+    expect(cursor).not.toBeNull();
+    expect(cursor!.classList.contains('editor-cursor-block')).toBe(true);
+    // Should not have bar class
+    expect(cursor!.classList.contains('editor-cursor-bar')).toBe(false);
+  });
+
+  it('test_cursor_underline_shape', () => {
+    render(<InputEditor {...defaultProps} value="echo" cursorShape="underline" />);
+    const editor = screen.getByTestId('input-editor');
+    const cursor = editor.querySelector('.editor-cursor');
+    expect(cursor).not.toBeNull();
+    expect(cursor!.classList.contains('editor-cursor-underline')).toBe(true);
+    // Should not have bar or block class
+    expect(cursor!.classList.contains('editor-cursor-bar')).toBe(false);
+    expect(cursor!.classList.contains('editor-cursor-block')).toBe(false);
+  });
 });

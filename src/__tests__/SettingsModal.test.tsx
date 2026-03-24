@@ -91,6 +91,7 @@ describe('SettingsModal', () => {
         font_family: undefined,
         font_size: undefined,
         line_height: undefined,
+        cursor_shape: 'bar',
       });
     });
   });
@@ -306,6 +307,60 @@ describe('SettingsModal', () => {
       expect(mockSaveSettings).toHaveBeenCalledTimes(1);
       const savedSettings = mockSaveSettings.mock.calls[0][0];
       expect(savedSettings.theme).toBe('one-dark');
+    });
+  });
+
+  // --- Task 049: Cursor shape settings tests ---
+
+  it('test_cursor_shape_setting_renders', async () => {
+    render(<SettingsModal onClose={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('settings-modal')).toBeInTheDocument();
+    });
+
+    const cursorShapeSelect = screen.getByTestId('settings-cursor-shape') as HTMLSelectElement;
+    expect(cursorShapeSelect).toBeInTheDocument();
+    // Default should be bar
+    expect(cursorShapeSelect.value).toBe('bar');
+    // Should have 3 options
+    expect(cursorShapeSelect.options.length).toBe(3);
+  });
+
+  it('test_cursor_shape_setting_persists', async () => {
+    mockGetSettings.mockResolvedValue({
+      llm_provider: 'openai',
+      api_key: '',
+      model: 'gpt-4o-mini',
+      cursor_shape: 'block',
+    });
+
+    render(<SettingsModal onClose={vi.fn()} />);
+
+    await waitFor(() => {
+      const cursorShapeSelect = screen.getByTestId('settings-cursor-shape') as HTMLSelectElement;
+      expect(cursorShapeSelect.value).toBe('block');
+    });
+  });
+
+  it('test_cursor_shape_saves_with_settings', async () => {
+    render(<SettingsModal onClose={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('settings-modal')).toBeInTheDocument();
+    });
+
+    // Change cursor shape
+    const cursorShapeSelect = screen.getByTestId('settings-cursor-shape');
+    fireEvent.change(cursorShapeSelect, { target: { value: 'underline' } });
+
+    // Save
+    fireEvent.click(screen.getByTestId('settings-save-btn'));
+
+    await waitFor(() => {
+      expect(mockSaveSettings).toHaveBeenCalledTimes(1);
+      const savedSettings = mockSaveSettings.mock.calls[0][0];
+      expect(savedSettings.cursor_shape).toBe('underline');
     });
   });
 });

@@ -3,7 +3,7 @@ import { useQuitWarning } from '../hooks/useQuitWarning';
 import { listen } from '@tauri-apps/api/event';
 import { createSession, writeToSession, closeSession, startReading } from '../lib/pty';
 import { isValidCwdPath } from '../lib/session';
-import { SHELL_TYPES, ShellType, Block } from '../lib/types';
+import { SHELL_TYPES, ShellType, Block, CursorShape } from '../lib/types';
 import { extractExitCode, getExitCodeMarker } from '../lib/exit-code-parser';
 import { classifyIntent, stripHashPrefix, ClassificationResult } from '../lib/intent-classifier';
 import { translateCommand, classifyIntentLLM } from '../lib/llm';
@@ -103,6 +103,7 @@ function Terminal({ paneId, onTitleChange }: TerminalProps) {
   const [historySearchOpen, setHistorySearchOpen] = useState(false);
   const savedInputRef = useRef('');
   const [hasApiKey, setHasApiKey] = useState(false);
+  const [cursorShape, setCursorShape] = useState<CursorShape>('bar');
 
   // Keep a stable ref for onTitleChange to avoid re-triggering the effect
   const onTitleChangeRef = useRef(onTitleChange);
@@ -557,6 +558,7 @@ function Terminal({ paneId, onTitleChange }: TerminalProps) {
     getSettings()
       .then((settings) => {
         setHasApiKey(!!settings.api_key);
+        setCursorShape(settings.cursor_shape ?? 'bar');
       })
       .catch(() => setHasApiKey(false));
   }, []);
@@ -1239,6 +1241,7 @@ function Terminal({ paneId, onTitleChange }: TerminalProps) {
             onTab={handleTab}
             onCursorChange={handleCursorChange}
             gitInfo={gitInfo}
+            cursorShape={cursorShape}
           />
           {agentError && (
             <div className="agent-error" data-testid="agent-error">

@@ -15,6 +15,8 @@ pub struct AppSettings {
     pub line_height: Option<f32>,
     #[serde(default)]
     pub theme: Option<String>,
+    #[serde(default)]
+    pub cursor_shape: Option<String>,
 }
 
 impl Default for AppSettings {
@@ -28,12 +30,16 @@ impl Default for AppSettings {
             font_size: None,
             line_height: None,
             theme: None,
+            cursor_shape: None,
         }
     }
 }
 
 /// Valid LLM provider identifiers.
 const VALID_PROVIDERS: &[&str] = &["openai", "anthropic", "google", "azure"];
+
+/// Valid cursor shape identifiers.
+const VALID_CURSOR_SHAPES: &[&str] = &["bar", "block", "underline"];
 
 /// Valid built-in theme identifiers.
 const VALID_THEMES: &[&str] = &[
@@ -124,6 +130,12 @@ pub fn validate_settings(settings: &AppSettings) -> Result<(), String> {
         }
     }
 
+    if let Some(ref shape) = settings.cursor_shape {
+        if !VALID_CURSOR_SHAPES.contains(&shape.as_str()) {
+            return Err(format!("Invalid cursor shape: {}", shape));
+        }
+    }
+
     if let Some(ref family) = settings.font_family {
         if family.is_empty() {
             return Err("Font family cannot be empty".to_string());
@@ -163,6 +175,7 @@ mod tests {
             font_size: None,
             line_height: None,
             theme: None,
+            cursor_shape: None,
         };
 
         let json = serde_json::to_string_pretty(&settings).unwrap();
@@ -182,6 +195,7 @@ mod tests {
             font_size: None,
             line_height: None,
             theme: None,
+            cursor_shape: None,
         };
 
         let json = serde_json::to_string_pretty(&settings).unwrap();
@@ -337,6 +351,7 @@ mod tests {
             font_size: None,
             line_height: None,
             theme: None,
+            cursor_shape: None,
         };
 
         // 7 rejected
@@ -371,6 +386,7 @@ mod tests {
             font_size: None,
             line_height: None,
             theme: None,
+            cursor_shape: None,
         };
 
         // 0.9 rejected
@@ -405,6 +421,7 @@ mod tests {
             font_size: None,
             line_height: None,
             theme: None,
+            cursor_shape: None,
         };
         assert!(validate_settings(&settings).is_err());
     }
@@ -433,6 +450,7 @@ mod tests {
                 font_size: None,
                 line_height: None,
                 theme: None,
+                cursor_shape: None,
             };
             let result = validate_settings(&settings);
             assert!(result.is_err(), "Should reject font_family: {:?}", input);
@@ -463,6 +481,7 @@ mod tests {
                 font_size: None,
                 line_height: None,
                 theme: None,
+                cursor_shape: None,
             };
             assert!(validate_settings(&settings).is_ok(), "Should accept font_family: {:?}", input);
         }
@@ -480,8 +499,61 @@ mod tests {
             font_size: None,
             line_height: None,
             theme: None,
+            cursor_shape: None,
         };
         assert!(validate_settings(&settings).is_err());
+    }
+
+    #[test]
+    fn test_cursor_shape_validation() {
+        // Valid shapes accepted
+        for shape in &["bar", "block", "underline"] {
+            let settings = AppSettings {
+                cursor_shape: Some(shape.to_string()),
+                ..Default::default()
+            };
+            assert!(validate_settings(&settings).is_ok(), "Cursor shape '{}' should be valid", shape);
+        }
+
+        // Invalid shape rejected
+        let settings = AppSettings {
+            cursor_shape: Some("beam".to_string()),
+            ..Default::default()
+        };
+        let result = validate_settings(&settings);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid cursor shape: beam"));
+
+        // None is valid (uses default)
+        let settings = AppSettings {
+            cursor_shape: None,
+            ..Default::default()
+        };
+        assert!(validate_settings(&settings).is_ok());
+    }
+
+    #[test]
+    fn test_cursor_shape_backward_compat() {
+        let json = r#"{
+            "llm_provider": "openai",
+            "api_key": "test-key",
+            "model": "gpt-4o-mini"
+        }"#;
+        let settings: AppSettings = serde_json::from_str(json).unwrap();
+        assert_eq!(settings.cursor_shape, None);
+        assert_eq!(settings.llm_provider, "openai");
+    }
+
+    #[test]
+    fn test_settings_with_cursor_shape_deserialize() {
+        let json = r#"{
+            "llm_provider": "openai",
+            "api_key": "test-key",
+            "model": "gpt-4o-mini",
+            "cursor_shape": "block"
+        }"#;
+        let settings: AppSettings = serde_json::from_str(json).unwrap();
+        assert_eq!(settings.cursor_shape, Some("block".to_string()));
     }
 
     #[test]

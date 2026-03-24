@@ -2,6 +2,7 @@ import { useMemo, useCallback, useRef, useState, type RefObject } from 'react';
 import { tokenize, Token } from '../../lib/shell-tokenizer';
 import { ClassificationResult } from '../../lib/intent-classifier';
 import type { GitInfo } from '../../lib/git';
+import type { CursorShape } from '../../lib/types';
 import ModeIndicator from './ModeIndicator';
 import GitContext from './GitContext';
 
@@ -19,6 +20,7 @@ interface InputEditorProps {
   onTab?: () => void;
   onCursorChange?: (pos: number) => void;
   gitInfo?: GitInfo | null;
+  cursorShape?: CursorShape;
 }
 
 /**
@@ -32,10 +34,12 @@ function buildOverlayContent(
   cursorPos: number,
   selStart: number,
   selEnd: number,
+  cursorShape: string = 'bar',
 ): React.ReactNode[] {
   const hasSelection = selStart !== selEnd;
   const nodes: React.ReactNode[] = [];
   let charIndex = 0;
+  const cursorClassName = `editor-cursor editor-cursor-${cursorShape} editor-cursor-blink`;
 
   for (let t = 0; t < tokens.length; t++) {
     const token = tokens[t];
@@ -46,7 +50,7 @@ function buildOverlayContent(
     // If cursor is exactly at token start (and no selection), insert cursor before this token
     if (!hasSelection && cursorPos === tokenStart) {
       nodes.push(
-        <span key={`cursor-${charIndex}`} className="editor-cursor editor-cursor-blink" />,
+        <span key={`cursor-${charIndex}`} className={cursorClassName} />,
       );
     }
 
@@ -73,7 +77,7 @@ function buildOverlayContent(
         // Insert cursor at this position if needed
         if (!hasSelection && globalPos === cursorPos) {
           parts.push(
-            <span key={`cursor-${globalPos}`} className="editor-cursor editor-cursor-blink" />,
+            <span key={`cursor-${globalPos}`} className={cursorClassName} />,
           );
         }
 
@@ -116,14 +120,14 @@ function buildOverlayContent(
   // Cursor at the very end of all tokens
   if (!hasSelection && cursorPos >= charIndex) {
     nodes.push(
-      <span key={`cursor-end`} className="editor-cursor editor-cursor-blink" />,
+      <span key={`cursor-end`} className={cursorClassName} />,
     );
   }
 
   return nodes;
 }
 
-function InputEditor({ value, onChange, onSubmit, disabled, ghostText, onNavigateUp, onNavigateDown, mode, onToggleMode, textareaRef: externalRef, onTab, onCursorChange, gitInfo }: InputEditorProps) {
+function InputEditor({ value, onChange, onSubmit, disabled, ghostText, onNavigateUp, onNavigateDown, mode, onToggleMode, textareaRef: externalRef, onTab, onCursorChange, gitInfo, cursorShape = 'bar' }: InputEditorProps) {
   const internalRef = useRef<HTMLTextAreaElement>(null);
   const textareaRef = externalRef || internalRef;
 
@@ -205,9 +209,9 @@ function InputEditor({ value, onChange, onSubmit, disabled, ghostText, onNavigat
   );
 
   const overlayContent = useMemo(
-    () => buildOverlayContent(tokens, cursorPosRef.current, selStartRef.current, selEndRef.current),
+    () => buildOverlayContent(tokens, cursorPosRef.current, selStartRef.current, selEndRef.current, cursorShape),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- refs read during render, tick forces recalc
-    [tokens, cursorPosRef.current, selStartRef.current, selEndRef.current],
+    [tokens, cursorPosRef.current, selStartRef.current, selEndRef.current, cursorShape],
   );
 
   return (

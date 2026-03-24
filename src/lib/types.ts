@@ -32,6 +32,9 @@ export interface Block {
 
 // --- Settings / LLM Provider Types ---
 
+export const CURSOR_SHAPES = ['bar', 'block', 'underline'] as const;
+export type CursorShape = typeof CURSOR_SHAPES[number];
+
 export interface AppSettings {
   llm_provider: LlmProviderId;
   api_key: string;
@@ -41,6 +44,7 @@ export interface AppSettings {
   font_size?: number;
   line_height?: number;
   theme?: string;
+  cursor_shape?: CursorShape;
 }
 
 export const LLM_PROVIDERS = [

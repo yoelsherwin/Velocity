@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { AppSettings, LLM_PROVIDERS, LlmProviderId } from '../lib/types';
+import { AppSettings, LLM_PROVIDERS, LlmProviderId, CURSOR_SHAPES, CursorShape } from '../lib/types';
 import { getSettings, saveSettings } from '../lib/settings';
 import { applyFontSettings } from '../lib/font-settings';
 import { THEMES, DEFAULT_THEME_ID, applyThemeById } from '../lib/themes';
@@ -18,6 +18,7 @@ function SettingsModal({ onClose }: SettingsModalProps) {
   const [fontFamily, setFontFamily] = useState('');
   const [fontSize, setFontSize] = useState<string>('');
   const [lineHeight, setLineHeight] = useState<string>('');
+  const [cursorShape, setCursorShape] = useState<CursorShape>('bar');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,6 +37,7 @@ function SettingsModal({ onClose }: SettingsModalProps) {
         setFontFamily(settings.font_family ?? '');
         setFontSize(settings.font_size != null ? String(settings.font_size) : '');
         setLineHeight(settings.line_height != null ? String(settings.line_height) : '');
+        setCursorShape(settings.cursor_shape ?? 'bar');
         setLoading(false);
       })
       .catch((err) => {
@@ -78,6 +80,7 @@ function SettingsModal({ onClose }: SettingsModalProps) {
       font_family: fontFamily || undefined,
       font_size: parsedFontSize && !isNaN(parsedFontSize) ? parsedFontSize : undefined,
       line_height: parsedLineHeight && !isNaN(parsedLineHeight) ? parsedLineHeight : undefined,
+      cursor_shape: cursorShape,
     };
     try {
       await saveSettings(settings);
@@ -184,6 +187,23 @@ function SettingsModal({ onClose }: SettingsModalProps) {
               onChange={(e) => setLineHeight(e.target.value)}
               placeholder="1.4"
             />
+
+            <label className="settings-label" htmlFor="settings-cursor-shape">
+              Cursor Shape
+            </label>
+            <select
+              id="settings-cursor-shape"
+              data-testid="settings-cursor-shape"
+              className="settings-select"
+              value={cursorShape}
+              onChange={(e) => setCursorShape(e.target.value as CursorShape)}
+            >
+              {CURSOR_SHAPES.map((shape) => (
+                <option key={shape} value={shape}>
+                  {shape.charAt(0).toUpperCase() + shape.slice(1)}
+                </option>
+              ))}
+            </select>
 
             {/* Font Preview */}
             <div
