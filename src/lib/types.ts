@@ -41,7 +41,12 @@ export interface AppSettings {
   font_size?: number;
   line_height?: number;
   theme?: string;
+  background_effect?: BackgroundEffect;
+  background_opacity?: number;
 }
+
+export const BACKGROUND_EFFECTS = ['none', 'transparent', 'acrylic', 'mica'] as const;
+export type BackgroundEffect = typeof BACKGROUND_EFFECTS[number];
 
 export const LLM_PROVIDERS = [
   { id: 'openai', name: 'OpenAI', defaultModel: 'gpt-4o-mini', models: ['gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo'] },

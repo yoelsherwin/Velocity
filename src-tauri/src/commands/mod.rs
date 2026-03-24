@@ -6,6 +6,7 @@ use serde::Serialize;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tauri::State;
+use tauri::Manager;
 
 /// Cached known commands with TTL to avoid re-scanning PATH on every Tab press.
 static COMMAND_CACHE: std::sync::LazyLock<Mutex<Option<(Instant, Vec<String>)>>> =
@@ -515,6 +516,46 @@ pub async fn create_new_window(app: tauri::AppHandle) -> Result<(), String> {
     .inner_size(1200.0, 800.0)
     .build()
     .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn set_window_effect(
+    app: tauri::AppHandle,
+    effect: String,
+    opacity: f64,
+) -> Result<(), String> {
+    settings::validate_window_effect(&effect, opacity)?;
+
+    let window = app
+        .get_webview_window("main")
+        .ok_or("No main window")?;
+
+    // Clear any previously applied effects first
+    let _ = window_vibrancy::clear_acrylic(&window);
+    let _ = window_vibrancy::clear_mica(&window);
+    let _ = window_vibrancy::clear_blur(&window);
+
+    match effect.as_str() {
+        "acrylic" => {
+            let alpha = (opacity * 255.0) as u8;
+            window_vibrancy::apply_acrylic(&window, Some((18, 18, 30, alpha)))
+                .map_err(|e| format!("Failed to apply acrylic effect: {}", e))?;
+        }
+        "mica" => {
+            window_vibrancy::apply_mica(&window, Some(true))
+                .map_err(|e| format!("Failed to apply mica effect: {}", e))?;
+        }
+        "transparent" => {
+            // For plain transparency, use blur with transparent color
+            let alpha = (opacity * 255.0) as u8;
+            window_vibrancy::apply_blur(&window, Some((18, 18, 30, alpha)))
+                .map_err(|e| format!("Failed to apply transparent effect: {}", e))?;
+        }
+        _ => {
+            // "none" — effects already cleared above
+        }
+    }
     Ok(())
 }
 

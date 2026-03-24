@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { AppSettings, LLM_PROVIDERS, LlmProviderId } from '../lib/types';
+import { AppSettings, LLM_PROVIDERS, LlmProviderId, BACKGROUND_EFFECTS, BackgroundEffect } from '../lib/types';
 import { getSettings, saveSettings } from '../lib/settings';
 import { applyFontSettings } from '../lib/font-settings';
 import { THEMES, DEFAULT_THEME_ID, applyThemeById } from '../lib/themes';
+import { applyBackgroundEffect } from '../lib/background-effects';
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -18,6 +19,8 @@ function SettingsModal({ onClose }: SettingsModalProps) {
   const [fontFamily, setFontFamily] = useState('');
   const [fontSize, setFontSize] = useState<string>('');
   const [lineHeight, setLineHeight] = useState<string>('');
+  const [backgroundEffect, setBackgroundEffect] = useState<BackgroundEffect>('none');
+  const [backgroundOpacity, setBackgroundOpacity] = useState<string>('1.0');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,6 +39,8 @@ function SettingsModal({ onClose }: SettingsModalProps) {
         setFontFamily(settings.font_family ?? '');
         setFontSize(settings.font_size != null ? String(settings.font_size) : '');
         setLineHeight(settings.line_height != null ? String(settings.line_height) : '');
+        setBackgroundEffect(settings.background_effect ?? 'none');
+        setBackgroundOpacity(settings.background_opacity != null ? String(settings.background_opacity) : '1.0');
         setLoading(false);
       })
       .catch((err) => {
@@ -69,6 +74,7 @@ function SettingsModal({ onClose }: SettingsModalProps) {
     setError(null);
     const parsedFontSize = fontSize ? Number(fontSize) : undefined;
     const parsedLineHeight = lineHeight ? Number(lineHeight) : undefined;
+    const parsedOpacity = backgroundOpacity ? Number(backgroundOpacity) : undefined;
     const settings: AppSettings = {
       llm_provider: provider,
       api_key: apiKey,
@@ -78,11 +84,14 @@ function SettingsModal({ onClose }: SettingsModalProps) {
       font_family: fontFamily || undefined,
       font_size: parsedFontSize && !isNaN(parsedFontSize) ? parsedFontSize : undefined,
       line_height: parsedLineHeight && !isNaN(parsedLineHeight) ? parsedLineHeight : undefined,
+      background_effect: backgroundEffect !== 'none' ? backgroundEffect : undefined,
+      background_opacity: parsedOpacity && !isNaN(parsedOpacity) ? parsedOpacity : undefined,
     };
     try {
       await saveSettings(settings);
       applyFontSettings(settings);
       applyThemeById(settings.theme ?? DEFAULT_THEME_ID);
+      applyBackgroundEffect(settings);
       onClose();
     } catch (err) {
       setError(String(err));
@@ -139,6 +148,48 @@ function SettingsModal({ onClose }: SettingsModalProps) {
                 </option>
               ))}
             </select>
+
+            <label className="settings-label" htmlFor="settings-background-effect">
+              Background Effect
+            </label>
+            <select
+              id="settings-background-effect"
+              data-testid="settings-background-effect"
+              className="settings-select"
+              value={backgroundEffect}
+              onChange={(e) => setBackgroundEffect(e.target.value as BackgroundEffect)}
+            >
+              {BACKGROUND_EFFECTS.map((eff) => (
+                <option key={eff} value={eff}>
+                  {eff.charAt(0).toUpperCase() + eff.slice(1)}
+                </option>
+              ))}
+            </select>
+
+            {backgroundEffect !== 'none' && (
+              <>
+                <label className="settings-label" htmlFor="settings-background-opacity">
+                  Background Opacity
+                </label>
+                <input
+                  id="settings-background-opacity"
+                  data-testid="settings-background-opacity"
+                  className="settings-input"
+                  type="range"
+                  min={0.5}
+                  max={1.0}
+                  step={0.05}
+                  value={backgroundOpacity}
+                  onChange={(e) => setBackgroundOpacity(e.target.value)}
+                />
+                <span
+                  data-testid="settings-opacity-value"
+                  style={{ color: 'var(--text-secondary)', fontSize: '12px', marginTop: '-8px' }}
+                >
+                  {Number(backgroundOpacity).toFixed(2)}
+                </span>
+              </>
+            )}
 
             <label className="settings-label" htmlFor="settings-font-family">
               Font Family

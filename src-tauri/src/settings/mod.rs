@@ -15,6 +15,10 @@ pub struct AppSettings {
     pub line_height: Option<f32>,
     #[serde(default)]
     pub theme: Option<String>,
+    #[serde(default)]
+    pub background_effect: Option<String>,
+    #[serde(default)]
+    pub background_opacity: Option<f64>,
 }
 
 impl Default for AppSettings {
@@ -28,12 +32,17 @@ impl Default for AppSettings {
             font_size: None,
             line_height: None,
             theme: None,
+            background_effect: None,
+            background_opacity: None,
         }
     }
 }
 
 /// Valid LLM provider identifiers.
 const VALID_PROVIDERS: &[&str] = &["openai", "anthropic", "google", "azure"];
+
+/// Valid background effect identifiers.
+const VALID_BACKGROUND_EFFECTS: &[&str] = &["none", "transparent", "acrylic", "mica"];
 
 /// Valid built-in theme identifiers.
 const VALID_THEMES: &[&str] = &[
@@ -80,6 +89,20 @@ pub fn save_settings(settings: &AppSettings) -> Result<(), String> {
         .map_err(|e| format!("Failed to finalize settings file: {}", e))
 }
 
+/// Validates window effect name and opacity for the set_window_effect command.
+pub fn validate_window_effect(effect: &str, opacity: f64) -> Result<(), String> {
+    if !VALID_BACKGROUND_EFFECTS.contains(&effect) {
+        return Err(format!("Invalid background effect: {}", effect));
+    }
+    if opacity < 0.5 || opacity > 1.0 {
+        return Err(format!(
+            "Background opacity must be between 0.5 and 1.0, got {}",
+            opacity
+        ));
+    }
+    Ok(())
+}
+
 /// Validates that the provider is one of the accepted values.
 pub fn validate_provider(provider: &str) -> Result<(), String> {
     if !VALID_PROVIDERS.contains(&provider) {
@@ -124,6 +147,21 @@ pub fn validate_settings(settings: &AppSettings) -> Result<(), String> {
         }
     }
 
+    if let Some(ref effect) = settings.background_effect {
+        if !VALID_BACKGROUND_EFFECTS.contains(&effect.as_str()) {
+            return Err(format!("Invalid background effect: {}", effect));
+        }
+    }
+
+    if let Some(opacity) = settings.background_opacity {
+        if opacity < 0.5 || opacity > 1.0 {
+            return Err(format!(
+                "Background opacity must be between 0.5 and 1.0, got {}",
+                opacity
+            ));
+        }
+    }
+
     if let Some(ref family) = settings.font_family {
         if family.is_empty() {
             return Err("Font family cannot be empty".to_string());
@@ -163,6 +201,8 @@ mod tests {
             font_size: None,
             line_height: None,
             theme: None,
+            background_effect: None,
+            background_opacity: None,
         };
 
         let json = serde_json::to_string_pretty(&settings).unwrap();
@@ -182,6 +222,8 @@ mod tests {
             font_size: None,
             line_height: None,
             theme: None,
+            background_effect: None,
+            background_opacity: None,
         };
 
         let json = serde_json::to_string_pretty(&settings).unwrap();
@@ -337,6 +379,8 @@ mod tests {
             font_size: None,
             line_height: None,
             theme: None,
+            background_effect: None,
+            background_opacity: None,
         };
 
         // 7 rejected
@@ -371,6 +415,8 @@ mod tests {
             font_size: None,
             line_height: None,
             theme: None,
+            background_effect: None,
+            background_opacity: None,
         };
 
         // 0.9 rejected
@@ -405,6 +451,8 @@ mod tests {
             font_size: None,
             line_height: None,
             theme: None,
+            background_effect: None,
+            background_opacity: None,
         };
         assert!(validate_settings(&settings).is_err());
     }
@@ -433,6 +481,8 @@ mod tests {
                 font_size: None,
                 line_height: None,
                 theme: None,
+                background_effect: None,
+                background_opacity: None,
             };
             let result = validate_settings(&settings);
             assert!(result.is_err(), "Should reject font_family: {:?}", input);
@@ -463,6 +513,8 @@ mod tests {
                 font_size: None,
                 line_height: None,
                 theme: None,
+                background_effect: None,
+                background_opacity: None,
             };
             assert!(validate_settings(&settings).is_ok(), "Should accept font_family: {:?}", input);
         }
@@ -480,6 +532,8 @@ mod tests {
             font_size: None,
             line_height: None,
             theme: None,
+            background_effect: None,
+            background_opacity: None,
         };
         assert!(validate_settings(&settings).is_err());
     }
@@ -505,6 +559,102 @@ mod tests {
         }"#;
         let settings: AppSettings = serde_json::from_str(json).unwrap();
         assert_eq!(settings.theme, None);
+        assert_eq!(settings.llm_provider, "openai");
+    }
+
+    #[test]
+    fn test_window_effect_validation() {
+        // Valid effects accepted
+        for effect in &["none", "transparent", "acrylic", "mica"] {
+            assert!(
+                validate_window_effect(effect, 0.8).is_ok(),
+                "Effect '{}' should be valid",
+                effect,
+            );
+        }
+
+        // Invalid effect rejected
+        let result = validate_window_effect("blur", 0.8);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid background effect: blur"));
+
+        let result = validate_window_effect("", 0.8);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_opacity_bounds() {
+        // Below minimum rejected
+        let result = validate_window_effect("transparent", 0.3);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("between 0.5 and 1.0"));
+
+        // At minimum accepted
+        assert!(validate_window_effect("transparent", 0.5).is_ok());
+
+        // At maximum accepted
+        assert!(validate_window_effect("transparent", 1.0).is_ok());
+
+        // Above maximum rejected
+        let result = validate_window_effect("transparent", 1.1);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("between 0.5 and 1.0"));
+    }
+
+    #[test]
+    fn test_background_effect_setting_validation() {
+        // Valid effect in settings
+        let settings = AppSettings {
+            background_effect: Some("acrylic".to_string()),
+            background_opacity: Some(0.8),
+            ..Default::default()
+        };
+        assert!(validate_settings(&settings).is_ok());
+
+        // Invalid effect in settings
+        let settings = AppSettings {
+            background_effect: Some("invalid".to_string()),
+            ..Default::default()
+        };
+        let result = validate_settings(&settings);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid background effect"));
+
+        // Invalid opacity in settings
+        let settings = AppSettings {
+            background_effect: Some("transparent".to_string()),
+            background_opacity: Some(0.2),
+            ..Default::default()
+        };
+        let result = validate_settings(&settings);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Background opacity"));
+    }
+
+    #[test]
+    fn test_settings_with_background_effect_deserialize() {
+        let json = r#"{
+            "llm_provider": "openai",
+            "api_key": "test-key",
+            "model": "gpt-4o-mini",
+            "background_effect": "acrylic",
+            "background_opacity": 0.85
+        }"#;
+        let settings: AppSettings = serde_json::from_str(json).unwrap();
+        assert_eq!(settings.background_effect, Some("acrylic".to_string()));
+        assert_eq!(settings.background_opacity, Some(0.85));
+    }
+
+    #[test]
+    fn test_settings_without_background_effect_backward_compat() {
+        let json = r#"{
+            "llm_provider": "openai",
+            "api_key": "test-key",
+            "model": "gpt-4o-mini"
+        }"#;
+        let settings: AppSettings = serde_json::from_str(json).unwrap();
+        assert_eq!(settings.background_effect, None);
+        assert_eq!(settings.background_opacity, None);
         assert_eq!(settings.llm_provider, "openai");
     }
 

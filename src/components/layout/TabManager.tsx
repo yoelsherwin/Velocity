@@ -8,6 +8,7 @@ import CommandPalette from '../CommandPalette';
 import { getSettings, saveSettings } from '../../lib/settings';
 import { applyFontSettings } from '../../lib/font-settings';
 import { applyThemeById, isValidThemeId, DEFAULT_THEME_ID } from '../../lib/themes';
+import { applyBackgroundEffect } from '../../lib/background-effects';
 import { loadSessionState, SessionState, SavedPane } from '../../lib/session';
 import { useSessionPersistence } from '../../hooks/useSessionPersistence';
 import { SessionContext, buildPaneLookup } from '../../lib/session-context';
@@ -128,6 +129,7 @@ function TabManager() {
       .then((settings) => {
         applyThemeById(settings.theme ?? DEFAULT_THEME_ID);
         applyFontSettings(settings);
+        applyBackgroundEffect(settings);
       })
       .catch(() => {
         // Ignore errors — CSS defaults remain in effect

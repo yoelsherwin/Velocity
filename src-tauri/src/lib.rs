@@ -33,6 +33,7 @@ pub fn run() {
             commands::save_session,
             commands::load_session,
             commands::create_new_window,
+            commands::set_window_effect,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

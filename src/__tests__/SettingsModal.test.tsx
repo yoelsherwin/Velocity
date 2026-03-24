@@ -8,6 +8,11 @@ const mockSaveSettings = vi.fn();
 vi.mock('../lib/settings', () => ({
   getSettings: (...args: unknown[]) => mockGetSettings(...args),
   saveSettings: (...args: unknown[]) => mockSaveSettings(...args),
+  setWindowEffect: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('../lib/background-effects', () => ({
+  applyBackgroundEffect: vi.fn(),
 }));
 
 import SettingsModal from '../components/SettingsModal';
@@ -91,6 +96,8 @@ describe('SettingsModal', () => {
         font_family: undefined,
         font_size: undefined,
         line_height: undefined,
+        background_effect: undefined,
+        background_opacity: 1,
       });
     });
   });
