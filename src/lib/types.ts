@@ -45,6 +45,7 @@ export interface AppSettings {
   line_height?: number;
   theme?: string;
   cursor_shape?: CursorShape;
+  auto_detect_nl?: boolean;
 }
 
 export const LLM_PROVIDERS = [

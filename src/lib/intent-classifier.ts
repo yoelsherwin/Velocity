@@ -84,6 +84,29 @@ export function classifyIntent(input: string, knownCommands: Set<string>): Class
 }
 
 /**
+ * Determines whether the given input should be auto-routed to the NL translation path.
+ *
+ * When `autoDetectNl` is true (the default), any input classified as NL with high confidence
+ * is routed automatically. When false, only inputs with an explicit `#` prefix are routed.
+ */
+export function shouldAutoRouteNL(
+    input: string,
+    classification: ClassificationResult,
+    autoDetectNl: boolean,
+): boolean {
+    const trimmed = input.trim();
+
+    // # prefix always forces NL routing regardless of the setting
+    if (trimmed.startsWith('#')) return true;
+
+    // Auto-detect disabled: require explicit # prefix
+    if (!autoDetectNl) return false;
+
+    // Auto-detect enabled: route if classified as NL with high confidence
+    return classification.intent === 'natural_language' && classification.confidence === 'high';
+}
+
+/**
  * Strips the leading `#` prefix (and optional space) from input.
  */
 export function stripHashPrefix(input: string): string {

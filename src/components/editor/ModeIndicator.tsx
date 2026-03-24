@@ -3,9 +3,10 @@ interface ModeIndicatorProps {
     confidence: 'high' | 'low';
     onToggle: () => void;
     disabled?: boolean;
+    autoDetected?: boolean;
 }
 
-function ModeIndicator({ intent, confidence, onToggle, disabled }: ModeIndicatorProps) {
+function ModeIndicator({ intent, confidence, onToggle, disabled, autoDetected }: ModeIndicatorProps) {
     const isAI = intent === 'natural_language';
     const isUncertain = confidence === 'low';
 
@@ -20,6 +21,7 @@ function ModeIndicator({ intent, confidence, onToggle, disabled }: ModeIndicator
         'mode-indicator',
         isAI ? 'mode-indicator-ai' : 'mode-indicator-cli',
         isUncertain ? 'mode-indicator-uncertain' : '',
+        autoDetected ? 'mode-indicator-flash' : '',
     ]
         .filter(Boolean)
         .join(' ');

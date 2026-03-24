@@ -61,4 +61,16 @@ describe('ModeIndicator Component', () => {
     const indicator = screen.getByTestId('mode-indicator');
     expect(indicator).not.toHaveClass('mode-indicator-uncertain');
   });
+
+  it('test_flash_class_applied_when_autoDetected', () => {
+    render(<ModeIndicator intent="natural_language" confidence="high" onToggle={vi.fn()} autoDetected />);
+    const indicator = screen.getByTestId('mode-indicator');
+    expect(indicator).toHaveClass('mode-indicator-flash');
+  });
+
+  it('test_no_flash_class_without_autoDetected', () => {
+    render(<ModeIndicator intent="natural_language" confidence="high" onToggle={vi.fn()} />);
+    const indicator = screen.getByTestId('mode-indicator');
+    expect(indicator).not.toHaveClass('mode-indicator-flash');
+  });
 });

@@ -21,6 +21,7 @@ interface InputEditorProps {
   onCursorChange?: (pos: number) => void;
   gitInfo?: GitInfo | null;
   cursorShape?: CursorShape;
+  modeAutoDetected?: boolean;
 }
 
 /**
@@ -127,7 +128,7 @@ function buildOverlayContent(
   return nodes;
 }
 
-function InputEditor({ value, onChange, onSubmit, disabled, ghostText, onNavigateUp, onNavigateDown, mode, onToggleMode, textareaRef: externalRef, onTab, onCursorChange, gitInfo, cursorShape = 'bar' }: InputEditorProps) {
+function InputEditor({ value, onChange, onSubmit, disabled, ghostText, onNavigateUp, onNavigateDown, mode, onToggleMode, textareaRef: externalRef, onTab, onCursorChange, gitInfo, cursorShape = 'bar', modeAutoDetected }: InputEditorProps) {
   const internalRef = useRef<HTMLTextAreaElement>(null);
   const textareaRef = externalRef || internalRef;
 
@@ -222,6 +223,7 @@ function InputEditor({ value, onChange, onSubmit, disabled, ghostText, onNavigat
           confidence={mode.confidence}
           onToggle={onToggleMode}
           disabled={disabled}
+          autoDetected={modeAutoDetected}
         />
       )}
       <GitContext gitInfo={gitInfo ?? null} />

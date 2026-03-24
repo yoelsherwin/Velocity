@@ -92,6 +92,7 @@ describe('SettingsModal', () => {
         font_size: undefined,
         line_height: undefined,
         cursor_shape: 'bar',
+        auto_detect_nl: true,
       });
     });
   });
@@ -361,6 +362,58 @@ describe('SettingsModal', () => {
       expect(mockSaveSettings).toHaveBeenCalledTimes(1);
       const savedSettings = mockSaveSettings.mock.calls[0][0];
       expect(savedSettings.cursor_shape).toBe('underline');
+    });
+  });
+
+  // --- Task 050: auto_detect_nl setting tests ---
+
+  it('test_auto_detect_nl_setting_renders', async () => {
+    render(<SettingsModal onClose={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('settings-modal')).toBeInTheDocument();
+    });
+
+    const checkbox = screen.getByTestId('settings-auto-detect-nl') as HTMLInputElement;
+    expect(checkbox).toBeInTheDocument();
+    // Default should be checked (true)
+    expect(checkbox.checked).toBe(true);
+  });
+
+  it('test_auto_detect_nl_setting_persists', async () => {
+    mockGetSettings.mockResolvedValue({
+      llm_provider: 'openai',
+      api_key: '',
+      model: 'gpt-4o-mini',
+      auto_detect_nl: false,
+    });
+
+    render(<SettingsModal onClose={vi.fn()} />);
+
+    await waitFor(() => {
+      const checkbox = screen.getByTestId('settings-auto-detect-nl') as HTMLInputElement;
+      expect(checkbox.checked).toBe(false);
+    });
+  });
+
+  it('test_auto_detect_nl_saves_with_settings', async () => {
+    render(<SettingsModal onClose={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('settings-modal')).toBeInTheDocument();
+    });
+
+    // Uncheck auto-detect NL
+    const checkbox = screen.getByTestId('settings-auto-detect-nl') as HTMLInputElement;
+    fireEvent.click(checkbox);
+
+    // Save
+    fireEvent.click(screen.getByTestId('settings-save-btn'));
+
+    await waitFor(() => {
+      expect(mockSaveSettings).toHaveBeenCalledTimes(1);
+      const savedSettings = mockSaveSettings.mock.calls[0][0];
+      expect(savedSettings.auto_detect_nl).toBe(false);
     });
   });
 });

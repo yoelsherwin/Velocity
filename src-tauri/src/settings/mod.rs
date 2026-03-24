@@ -17,6 +17,12 @@ pub struct AppSettings {
     pub theme: Option<String>,
     #[serde(default)]
     pub cursor_shape: Option<String>,
+    #[serde(default = "default_auto_detect_nl")]
+    pub auto_detect_nl: Option<bool>,
+}
+
+fn default_auto_detect_nl() -> Option<bool> {
+    Some(true)
 }
 
 impl Default for AppSettings {
@@ -31,6 +37,7 @@ impl Default for AppSettings {
             line_height: None,
             theme: None,
             cursor_shape: None,
+            auto_detect_nl: Some(true),
         }
     }
 }
@@ -176,6 +183,7 @@ mod tests {
             line_height: None,
             theme: None,
             cursor_shape: None,
+            auto_detect_nl: Some(true),
         };
 
         let json = serde_json::to_string_pretty(&settings).unwrap();
@@ -196,6 +204,7 @@ mod tests {
             line_height: None,
             theme: None,
             cursor_shape: None,
+            auto_detect_nl: Some(true),
         };
 
         let json = serde_json::to_string_pretty(&settings).unwrap();
@@ -352,6 +361,7 @@ mod tests {
             line_height: None,
             theme: None,
             cursor_shape: None,
+            auto_detect_nl: Some(true),
         };
 
         // 7 rejected
@@ -387,6 +397,7 @@ mod tests {
             line_height: None,
             theme: None,
             cursor_shape: None,
+            auto_detect_nl: Some(true),
         };
 
         // 0.9 rejected
@@ -422,6 +433,7 @@ mod tests {
             line_height: None,
             theme: None,
             cursor_shape: None,
+            auto_detect_nl: Some(true),
         };
         assert!(validate_settings(&settings).is_err());
     }
@@ -451,6 +463,7 @@ mod tests {
                 line_height: None,
                 theme: None,
                 cursor_shape: None,
+                auto_detect_nl: Some(true),
             };
             let result = validate_settings(&settings);
             assert!(result.is_err(), "Should reject font_family: {:?}", input);
@@ -482,6 +495,7 @@ mod tests {
                 line_height: None,
                 theme: None,
                 cursor_shape: None,
+                auto_detect_nl: Some(true),
             };
             assert!(validate_settings(&settings).is_ok(), "Should accept font_family: {:?}", input);
         }
@@ -500,6 +514,7 @@ mod tests {
             line_height: None,
             theme: None,
             cursor_shape: None,
+            auto_detect_nl: Some(true),
         };
         assert!(validate_settings(&settings).is_err());
     }
@@ -554,6 +569,41 @@ mod tests {
         }"#;
         let settings: AppSettings = serde_json::from_str(json).unwrap();
         assert_eq!(settings.cursor_shape, Some("block".to_string()));
+    }
+
+    #[test]
+    fn test_auto_detect_nl_setting_backward_compat() {
+        // Old settings JSON without auto_detect_nl should deserialize with default = true
+        let json = r#"{
+            "llm_provider": "openai",
+            "api_key": "test-key",
+            "model": "gpt-4o-mini"
+        }"#;
+        let settings: AppSettings = serde_json::from_str(json).unwrap();
+        assert_eq!(settings.auto_detect_nl, Some(true));
+    }
+
+    #[test]
+    fn test_auto_detect_nl_setting_explicit_false() {
+        let json = r#"{
+            "llm_provider": "openai",
+            "api_key": "test-key",
+            "model": "gpt-4o-mini",
+            "auto_detect_nl": false
+        }"#;
+        let settings: AppSettings = serde_json::from_str(json).unwrap();
+        assert_eq!(settings.auto_detect_nl, Some(false));
+    }
+
+    #[test]
+    fn test_auto_detect_nl_setting_roundtrip() {
+        let settings = AppSettings {
+            auto_detect_nl: Some(false),
+            ..Default::default()
+        };
+        let json = serde_json::to_string_pretty(&settings).unwrap();
+        let deserialized: AppSettings = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.auto_detect_nl, Some(false));
     }
 
     #[test]

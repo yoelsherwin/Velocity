@@ -19,6 +19,7 @@ function SettingsModal({ onClose }: SettingsModalProps) {
   const [fontSize, setFontSize] = useState<string>('');
   const [lineHeight, setLineHeight] = useState<string>('');
   const [cursorShape, setCursorShape] = useState<CursorShape>('bar');
+  const [autoDetectNl, setAutoDetectNl] = useState(true);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,6 +39,7 @@ function SettingsModal({ onClose }: SettingsModalProps) {
         setFontSize(settings.font_size != null ? String(settings.font_size) : '');
         setLineHeight(settings.line_height != null ? String(settings.line_height) : '');
         setCursorShape(settings.cursor_shape ?? 'bar');
+        setAutoDetectNl(settings.auto_detect_nl ?? true);
         setLoading(false);
       })
       .catch((err) => {
@@ -81,6 +83,7 @@ function SettingsModal({ onClose }: SettingsModalProps) {
       font_size: parsedFontSize && !isNaN(parsedFontSize) ? parsedFontSize : undefined,
       line_height: parsedLineHeight && !isNaN(parsedLineHeight) ? parsedLineHeight : undefined,
       cursor_shape: cursorShape,
+      auto_detect_nl: autoDetectNl,
     };
     try {
       await saveSettings(settings);
@@ -221,6 +224,17 @@ function SettingsModal({ onClose }: SettingsModalProps) {
             >
               {'$ echo "Hello, World!"'}
             </div>
+
+            {/* NL Auto-Detect */}
+            <label className="settings-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                data-testid="settings-auto-detect-nl"
+                checked={autoDetectNl}
+                onChange={(e) => setAutoDetectNl(e.target.checked)}
+              />
+              Auto-detect natural language (without # prefix)
+            </label>
 
             <div style={{ borderBottom: '1px solid var(--border-color)', margin: '4px 0' }} />
 

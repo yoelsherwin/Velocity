@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { classifyIntent, stripHashPrefix, ClassificationResult } from '../lib/intent-classifier';
+import { classifyIntent, stripHashPrefix, shouldAutoRouteNL, ClassificationResult } from '../lib/intent-classifier';
 
 describe('classifyIntent', () => {
   // Default known commands set for most tests
@@ -171,6 +171,52 @@ describe('classifyIntent', () => {
     expectResult(classifyIntent('ls -la', empty), 'cli', 'high');
     // Question still NL
     expectResult(classifyIntent('how do I list files', empty), 'natural_language', 'high');
+  });
+});
+
+describe('shouldAutoRouteNL', () => {
+  const defaultKnown = new Set(['git', 'dir', 'echo', 'docker', 'npm', 'kubectl', 'cd', 'cls', 'find']);
+
+  it('test_nl_auto_detected_without_hash', () => {
+    // "show me all files" is classified as NL high confidence — auto-route should trigger
+    const input = 'show me all files';
+    const classification = classifyIntent(input, defaultKnown);
+    expect(classification.intent).toBe('natural_language');
+    expect(classification.confidence).toBe('high');
+    expect(shouldAutoRouteNL(input, classification, true)).toBe(true);
+  });
+
+  it('test_hash_still_works', () => {
+    // "# list processes" should always route to NL, regardless of auto_detect_nl
+    const input = '# list processes';
+    const classification = classifyIntent(input, defaultKnown);
+    expect(shouldAutoRouteNL(input, classification, true)).toBe(true);
+    expect(shouldAutoRouteNL(input, classification, false)).toBe(true);
+  });
+
+  it('test_cli_not_auto_detected_as_nl', () => {
+    // "git status" is CLI — should never auto-route to NL
+    const input = 'git status';
+    const classification = classifyIntent(input, defaultKnown);
+    expect(classification.intent).toBe('cli');
+    expect(shouldAutoRouteNL(input, classification, true)).toBe(false);
+  });
+
+  it('test_auto_detect_disabled_requires_hash', () => {
+    // With auto_detect_nl = false, "show me files" should NOT route to NL
+    const input = 'show me all files';
+    const classification = classifyIntent(input, defaultKnown);
+    expect(classification.intent).toBe('natural_language');
+    expect(shouldAutoRouteNL(input, classification, false)).toBe(false);
+  });
+
+  it('test_low_confidence_nl_not_auto_routed', () => {
+    // Low confidence NL should not be auto-routed (goes through LLM fallback instead)
+    const input = 'foo bar baz';
+    const classification = classifyIntent(input, defaultKnown);
+    expect(classification.intent).toBe('natural_language');
+    expect(classification.confidence).toBe('low');
+    expect(shouldAutoRouteNL(input, classification, true)).toBe(false);
   });
 });
 
