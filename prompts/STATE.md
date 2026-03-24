@@ -58,6 +58,10 @@ None.
 | P2-19 | Transparent/blurred backgrounds | **DONE** (merged) |
 | P2-20 | Block bookmarking | **DONE** (`TASK-052`) |
 | P1-U6 | Global hotkey (Quake-style) | **DONE** (`228f5b2`) |
+| P3-8 | Built-in file tree sidebar | **DONE** (`6953000`) |
+| SEC-015-H1 | OS keychain for API keys | **DONE** (`e42bcff`) |
+| SEC-015-H2 | Google API key URL fix | **DONE** (`4d69340`) |
+| SEC-017-H1 | Dangerous command warnings | **DONE** (`4bb2ce7` + `67bd43a`) |
 
 ## Outstanding Issues
 
@@ -112,11 +116,11 @@ None.
 
 | Layer | Count |
 |-------|-------|
-| Vitest (frontend) | 605 |
-| cargo test (Rust unit) | 155 (+1 ignored) |
+| Vitest (frontend) | 620 |
+| cargo test (Rust unit) | 197 (+1 ignored) |
 | Rust integration | 11 |
 | Playwright E2E | 28 |
-| **Total** | **~799** |
+| **Total** | **~856** |
 
 ## Remaining Phase 1 Roadmap
 
