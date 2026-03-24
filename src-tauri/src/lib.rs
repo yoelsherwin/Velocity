@@ -68,6 +68,7 @@ pub fn run() {
             commands::get_git_info,
             commands::save_session,
             commands::load_session,
+            commands::list_directory,
             commands::create_new_window,
             commands::set_window_effect,
         ])

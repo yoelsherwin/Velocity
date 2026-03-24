@@ -485,6 +485,13 @@ html, body, #root {
   overflow: hidden;
 }
 
+.tab-content-main {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  min-width: 0;
+}
+
 .tab-panel {
   flex: 1;
   flex-direction: column;
@@ -1392,4 +1399,118 @@ html, body, #root {
 .error-suggestion-dismiss:hover {
   background-color: var(--bg-surface);
   color: var(--text-primary);
+}
+
+/* --- File Tree Sidebar Styles --- */
+
+.file-tree-sidebar {
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-surface);
+  border-right: 1px solid var(--border-color);
+  min-width: 150px;
+  max-width: 400px;
+  overflow: hidden;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.file-tree-header {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.file-tree-title {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.file-tree-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 4px 0;
+}
+
+.file-tree-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.file-tree-content::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+  border-radius: 3px;
+}
+
+.file-tree-node {
+  /* container for item + children */
+}
+
+.file-tree-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px 2px 12px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background-color 0.1s;
+}
+
+.file-tree-item:hover {
+  background-color: var(--bg-overlay);
+  color: var(--text-primary);
+}
+
+.file-tree-hidden {
+  opacity: 0.5;
+}
+
+.file-tree-icon {
+  flex-shrink: 0;
+  font-size: 14px;
+  width: 18px;
+  text-align: center;
+}
+
+.file-tree-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-tree-loading {
+  color: var(--text-muted);
+  font-size: 11px;
+  margin-left: 4px;
+}
+
+.file-tree-children {
+  padding-left: 12px;
+}
+
+.file-tree-error {
+  color: var(--accent-red);
+  font-size: 12px;
+  padding: 8px 12px;
+}
+
+.file-tree-resize-handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 4px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 10;
+}
+
+.file-tree-resize-handle:hover {
+  background-color: var(--accent-blue);
 }

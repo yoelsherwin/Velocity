@@ -559,6 +559,89 @@ pub async fn set_window_effect(
     Ok(())
 }
 
+#[derive(Serialize, Clone, Debug)]
+pub struct FileEntry {
+    pub name: String,
+    pub path: String,
+    pub is_directory: bool,
+    pub is_hidden: bool,
+}
+
+/// Core logic for `list_directory` — extracted for testability without Tauri runtime.
+pub fn compute_list_directory(path: &str) -> Result<Vec<FileEntry>, String> {
+    const MAX_ENTRIES: usize = 500;
+
+    let dir_path = std::path::Path::new(path);
+    if !dir_path.is_dir() {
+        return Err(format!("Invalid directory: {}", path));
+    }
+
+    let entries = std::fs::read_dir(dir_path)
+        .map_err(|e| format!("Failed to read directory: {}", e))?;
+
+    let mut dirs: Vec<FileEntry> = Vec::new();
+    let mut files: Vec<FileEntry> = Vec::new();
+
+    for entry in entries.flatten() {
+        let name = match entry.file_name().to_str() {
+            Some(n) => n.to_string(),
+            None => continue,
+        };
+
+        let entry_path = entry.path().to_string_lossy().to_string();
+        let is_directory = entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false);
+
+        // Detect hidden: starts with '.' or has Windows hidden attribute
+        let is_hidden = name.starts_with('.') || {
+            #[cfg(target_os = "windows")]
+            {
+                use std::os::windows::fs::MetadataExt;
+                entry.metadata()
+                    .map(|m| m.file_attributes() & 0x2 != 0) // FILE_ATTRIBUTE_HIDDEN
+                    .unwrap_or(false)
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                false
+            }
+        };
+
+        let file_entry = FileEntry {
+            name,
+            path: entry_path,
+            is_directory,
+            is_hidden,
+        };
+
+        if is_directory {
+            dirs.push(file_entry);
+        } else {
+            files.push(file_entry);
+        }
+    }
+
+    // Sort alphabetically (case-insensitive)
+    dirs.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    files.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+
+    // Directories first, then files
+    let mut results = dirs;
+    results.extend(files);
+
+    // Limit to MAX_ENTRIES
+    results.truncate(MAX_ENTRIES);
+
+    Ok(results)
+}
+
+#[tauri::command]
+pub async fn list_directory(path: String) -> Result<Vec<FileEntry>, String> {
+    let p = path.clone();
+    tokio::task::spawn_blocking(move || compute_list_directory(&p))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 #[tauri::command]
 pub async fn save_session(state: String) -> Result<(), String> {
     session::save_session(&state)
@@ -731,6 +814,64 @@ mod tests {
         // The async fn returns impl Future<Output = Result<(), String>>.
         let _exists = create_new_window as fn(tauri::AppHandle) -> _;
         // If this compiles, the command exists with the expected signature.
+    }
+
+    #[test]
+    fn test_list_directory_returns_entries() {
+        let dir = std::env::temp_dir().join("velocity_test_list_dir_entries");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("alpha.txt"), "").unwrap();
+        fs::write(dir.join("beta.txt"), "").unwrap();
+
+        let result = compute_list_directory(&dir.to_string_lossy()).unwrap();
+        assert_eq!(result.len(), 2);
+        let names: Vec<&str> = result.iter().map(|e| e.name.as_str()).collect();
+        assert!(names.contains(&"alpha.txt"));
+        assert!(names.contains(&"beta.txt"));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_list_directory_sorts_dirs_first() {
+        let dir = std::env::temp_dir().join("velocity_test_list_dir_sort");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("aaa_file.txt"), "").unwrap();
+        fs::create_dir_all(dir.join("zzz_folder")).unwrap();
+
+        let result = compute_list_directory(&dir.to_string_lossy()).unwrap();
+        assert_eq!(result.len(), 2);
+        // Directory should come first even though it's alphabetically after the file
+        assert!(result[0].is_directory, "First entry should be directory");
+        assert_eq!(result[0].name, "zzz_folder");
+        assert!(!result[1].is_directory, "Second entry should be file");
+        assert_eq!(result[1].name, "aaa_file.txt");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_list_directory_invalid_path() {
+        let result = compute_list_directory("C:\\this_path_does_not_exist_velocity_999");
+        assert!(result.is_err(), "Should return error for invalid path");
+    }
+
+    #[test]
+    fn test_list_directory_limited_entries() {
+        let dir = std::env::temp_dir().join("velocity_test_list_dir_limit");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
+        for i in 0..600 {
+            fs::write(dir.join(format!("file_{:04}.txt", i)), "").unwrap();
+        }
+
+        let result = compute_list_directory(&dir.to_string_lossy()).unwrap();
+        assert!(result.len() <= 500, "Expected at most 500 results, got {}", result.len());
+
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

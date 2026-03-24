@@ -3,6 +3,7 @@ import { Tab, PaneDirection, PaneNode } from '../../lib/types';
 import { splitPane, closePane, countLeaves, getLeafIds, updatePaneRatio } from '../../lib/pane-utils';
 import TabBar from './TabBar';
 import PaneContainer from './PaneContainer';
+import FileTree from './FileTree';
 import SettingsModal from '../SettingsModal';
 import CommandPalette from '../CommandPalette';
 import { getSettings, saveSettings } from '../../lib/settings';
@@ -92,6 +93,9 @@ function TabManager() {
   const activeTabIdRef = useRef(activeTabId);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState(200);
+  const [sidebarRootPath, setSidebarRootPath] = useState<string>('');
 
   // Session persistence
   const sessionPersistence = useSessionPersistence();
@@ -134,6 +138,13 @@ function TabManager() {
       .catch(() => {
         // Ignore errors — CSS defaults remain in effect
       });
+  }, []);
+
+  // Load initial CWD for file tree sidebar
+  useEffect(() => {
+    invoke<string>('get_cwd')
+      .then((cwd) => setSidebarRootPath(cwd))
+      .catch(() => { /* ignore */ });
   }, []);
 
   // Keep tabsRef in sync with tabs state
@@ -368,6 +379,11 @@ function TabManager() {
           // Ignore errors (e.g. in test environment)
         });
       }
+      // Ctrl+Shift+E: Toggle file tree sidebar
+      if (e.ctrlKey && e.shiftKey && (e.key === 'E' || e.key === 'e')) {
+        e.preventDefault();
+        setSidebarOpen((prev) => !prev);
+      }
       // Ctrl+Shift+P: Toggle command palette
       if (e.ctrlKey && e.shiftKey && (e.key === 'P' || e.key === 'p')) {
         e.preventDefault();
@@ -388,6 +404,15 @@ function TabManager() {
     document.dispatchEvent(
       new CustomEvent('velocity:command', {
         detail: { commandId, paneId: focusedPaneIdRef.current },
+      }),
+    );
+  }, []);
+
+  const handleFileClick = useCallback((filePath: string) => {
+    // Dispatch a custom event so the focused terminal can insert the path
+    document.dispatchEvent(
+      new CustomEvent('velocity:insert-text', {
+        detail: { text: filePath, paneId: focusedPaneIdRef.current },
       }),
     );
   }, []);
@@ -420,6 +445,9 @@ function TabManager() {
           if (focusedPaneIdRef.current) {
             handleClosePane(activeTabIdRef.current, focusedPaneIdRef.current);
           }
+          break;
+        case 'sidebar.toggle':
+          setSidebarOpen((prev) => !prev);
           break;
         case 'settings.open':
           setSettingsOpen(true);
@@ -464,25 +492,35 @@ function TabManager() {
           onReorderTabs={handleReorderTabs}
         />
         <div className="tab-content">
-          {tabs.map((tab) => (
-            <div
-              key={tab.id}
-              className="tab-panel"
-              style={{ display: tab.id === activeTabId ? 'flex' : 'none' }}
-              data-testid={`tab-panel-${tab.id}`}
-            >
-              <PaneContainer
-                node={tab.paneRoot}
-                focusedPaneId={tab.id === activeTabId ? focusedPaneId : tab.focusedPaneId}
-                onFocusPane={handleFocusPane}
-                onSplitPane={(paneId, dir) => handleSplitPane(tab.id, paneId, dir)}
-                onClosePane={(paneId) => handleClosePane(tab.id, paneId)}
-                onResizePane={(splitId, newRatio) => handleResizePane(tab.id, splitId, newRatio)}
-                onTitleChange={(paneId, title) => handleTitleChange(tab.id, paneId, title)}
-                isOnlyPane={countLeaves(tab.paneRoot) === 1}
-              />
-            </div>
-          ))}
+          {sidebarOpen && sidebarRootPath && (
+            <FileTree
+              rootPath={sidebarRootPath}
+              onFileClick={handleFileClick}
+              width={sidebarWidth}
+              onResize={setSidebarWidth}
+            />
+          )}
+          <div className="tab-content-main">
+            {tabs.map((tab) => (
+              <div
+                key={tab.id}
+                className="tab-panel"
+                style={{ display: tab.id === activeTabId ? 'flex' : 'none' }}
+                data-testid={`tab-panel-${tab.id}`}
+              >
+                <PaneContainer
+                  node={tab.paneRoot}
+                  focusedPaneId={tab.id === activeTabId ? focusedPaneId : tab.focusedPaneId}
+                  onFocusPane={handleFocusPane}
+                  onSplitPane={(paneId, dir) => handleSplitPane(tab.id, paneId, dir)}
+                  onClosePane={(paneId) => handleClosePane(tab.id, paneId)}
+                  onResizePane={(splitId, newRatio) => handleResizePane(tab.id, splitId, newRatio)}
+                  onTitleChange={(paneId, title) => handleTitleChange(tab.id, paneId, title)}
+                  isOnlyPane={countLeaves(tab.paneRoot) === 1}
+                />
+              </div>
+            ))}
+          </div>
         </div>
         {paletteOpen && (
           <CommandPalette

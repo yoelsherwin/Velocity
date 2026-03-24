@@ -24,6 +24,7 @@ export const COMMANDS: Command[] = [
   { id: 'block.nextBookmark', title: 'Next Bookmark', category: 'Navigation', keywords: ['bookmark', 'jump', 'next'] },
   { id: 'block.prevBookmark', title: 'Previous Bookmark', category: 'Navigation', keywords: ['bookmark', 'jump', 'previous'] },
   { id: 'search.find', title: 'Find in Output', shortcut: 'Ctrl+Shift+F', category: 'Search', keywords: ['search', 'grep'] },
+  { id: 'sidebar.toggle', title: 'Toggle File Explorer', shortcut: 'Ctrl+Shift+E', category: 'View', keywords: ['sidebar', 'file', 'tree', 'explorer', 'toggle'] },
   { id: 'settings.open', title: 'Open Settings', category: 'Settings', keywords: ['preferences', 'config'] },
   { id: 'shell.powershell', title: 'Switch to PowerShell', category: 'Terminal', keywords: ['shell'] },
   { id: 'shell.cmd', title: 'Switch to CMD', category: 'Terminal', keywords: ['shell', 'command prompt'] },
