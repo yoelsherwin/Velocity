@@ -119,7 +119,7 @@ pub async fn get_settings() -> Result<AppSettings, String> {
 #[tauri::command]
 pub async fn save_app_settings(settings: AppSettings) -> Result<(), String> {
     settings::validate_settings(&settings)?;
-    settings::save_settings(&settings)
+    settings::save_settings_with_key(&settings)
 }
 
 #[tauri::command]

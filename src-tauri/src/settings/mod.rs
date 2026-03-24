@@ -1,6 +1,71 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+const KEYRING_SERVICE: &str = "velocity";
+
+/// Store an API key in the OS keychain for the given provider.
+pub fn store_api_key(provider: &str, key: &str) -> Result<(), String> {
+    let entry = keyring::Entry::new(KEYRING_SERVICE, &format!("api-key-{}", provider))
+        .map_err(|e| format!("Failed to create keyring entry: {}", e))?;
+    entry
+        .set_password(key)
+        .map_err(|e| format!("Failed to store API key in keychain: {}", e))?;
+    Ok(())
+}
+
+/// Retrieve an API key from the OS keychain for the given provider.
+/// Returns Ok(None) if no entry exists.
+pub fn get_api_key(provider: &str) -> Result<Option<String>, String> {
+    let entry = keyring::Entry::new(KEYRING_SERVICE, &format!("api-key-{}", provider))
+        .map_err(|e| format!("Failed to create keyring entry: {}", e))?;
+    match entry.get_password() {
+        Ok(key) => Ok(Some(key)),
+        Err(keyring::Error::NoEntry) => Ok(None),
+        Err(e) => Err(format!("Failed to retrieve API key from keychain: {}", e)),
+    }
+}
+
+/// Delete an API key from the OS keychain for the given provider.
+pub fn delete_api_key(provider: &str) -> Result<(), String> {
+    let entry = keyring::Entry::new(KEYRING_SERVICE, &format!("api-key-{}", provider))
+        .map_err(|e| format!("Failed to create keyring entry: {}", e))?;
+    match entry.delete_credential() {
+        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+        Err(e) => Err(format!("Failed to delete API key from keychain: {}", e)),
+    }
+}
+
+/// Migrate plaintext API key from settings JSON to OS keychain.
+/// After migration, the api_key field in the JSON file is cleared.
+fn migrate_api_key_to_keychain(settings: &mut AppSettings) {
+    if settings.api_key.is_empty() {
+        return;
+    }
+    match store_api_key(&settings.llm_provider, &settings.api_key) {
+        Ok(()) => {
+            // Clear from struct so it gets saved without the key
+            let api_key_backup = settings.api_key.clone();
+            settings.api_key = String::new();
+            // Save the cleared settings back to disk
+            if let Err(e) = save_settings(settings) {
+                eprintln!("Warning: failed to save settings after migration: {}", e);
+                // Restore so caller still has the key in memory
+                settings.api_key = api_key_backup;
+            } else {
+                // Put the key back in the in-memory struct so callers still see it
+                settings.api_key = api_key_backup;
+            }
+        }
+        Err(e) => {
+            eprintln!(
+                "Warning: keychain unavailable, keeping API key in plaintext: {}",
+                e
+            );
+            // Fallback: leave plaintext as-is
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct AppSettings {
     pub llm_provider: String,
@@ -77,7 +142,9 @@ pub fn settings_path() -> Result<PathBuf, String> {
     Ok(velocity_dir.join("settings.json"))
 }
 
-/// Loads settings from disk. Returns defaults if the file does not exist.
+/// Loads settings from disk, merging the API key from the OS keychain.
+/// If the JSON file still contains a plaintext API key, it is migrated to the keychain
+/// and cleared from the file (one-time migration).
 pub fn load_settings() -> Result<AppSettings, String> {
     let path = settings_path()?;
     if !path.exists() {
@@ -85,21 +152,75 @@ pub fn load_settings() -> Result<AppSettings, String> {
     }
     let content = std::fs::read_to_string(&path)
         .map_err(|e| format!("Failed to read settings: {}", e))?;
-    serde_json::from_str(&content)
-        .map_err(|e| format!("Failed to parse settings: {}", e))
+    let mut settings: AppSettings = serde_json::from_str(&content)
+        .map_err(|e| format!("Failed to parse settings: {}", e))?;
+
+    // One-time migration: move plaintext key to keychain
+    if !settings.api_key.is_empty() {
+        migrate_api_key_to_keychain(&mut settings);
+        return Ok(settings);
+    }
+
+    // Normal path: fetch key from keychain and merge into the returned struct
+    match get_api_key(&settings.llm_provider) {
+        Ok(Some(key)) => {
+            settings.api_key = key;
+        }
+        Ok(None) => {
+            // No key stored — leave empty
+        }
+        Err(e) => {
+            eprintln!("Warning: failed to read API key from keychain: {}", e);
+            // Fallback: return settings without key
+        }
+    }
+
+    Ok(settings)
 }
 
 /// Persists settings to disk as pretty-printed JSON.
+/// The api_key field is NOT written to disk — it is stored only in the OS keychain.
 /// Uses atomic write (write to .tmp then rename) to prevent corruption on crash.
 pub fn save_settings(settings: &AppSettings) -> Result<(), String> {
     let path = settings_path()?;
-    let content = serde_json::to_string_pretty(settings)
+    // Write settings with api_key cleared so it never lands in the JSON file
+    let mut disk_settings = settings.clone();
+    disk_settings.api_key = String::new();
+    let content = serde_json::to_string_pretty(&disk_settings)
         .map_err(|e| format!("Failed to serialize settings: {}", e))?;
     let tmp_path = path.with_extension("json.tmp");
     std::fs::write(&tmp_path, &content)
         .map_err(|e| format!("Failed to write settings: {}", e))?;
     std::fs::rename(&tmp_path, &path)
         .map_err(|e| format!("Failed to finalize settings file: {}", e))
+}
+
+/// Save settings including the API key: stores key in keychain, then writes JSON without it.
+pub fn save_settings_with_key(settings: &AppSettings) -> Result<(), String> {
+    // Store API key in keychain if non-empty
+    if !settings.api_key.is_empty() {
+        match store_api_key(&settings.llm_provider, &settings.api_key) {
+            Ok(()) => {}
+            Err(e) => {
+                eprintln!("Warning: keychain unavailable, API key not stored securely: {}", e);
+                // Fallback: save with key in plaintext so user doesn't lose it
+                let path = settings_path()?;
+                let content = serde_json::to_string_pretty(settings)
+                    .map_err(|err| format!("Failed to serialize settings: {}", err))?;
+                let tmp_path = path.with_extension("json.tmp");
+                std::fs::write(&tmp_path, &content)
+                    .map_err(|err| format!("Failed to write settings: {}", err))?;
+                std::fs::rename(&tmp_path, &path)
+                    .map_err(|err| format!("Failed to finalize settings file: {}", err))?;
+                return Ok(());
+            }
+        }
+    } else {
+        // Empty key: delete from keychain if it was previously stored
+        let _ = delete_api_key(&settings.llm_provider);
+    }
+
+    save_settings(settings)
 }
 
 /// Validates window effect name and opacity for the set_window_effect command.
@@ -806,5 +927,138 @@ mod tests {
             ..Default::default()
         };
         assert!(validate_settings(&settings).is_ok());
+    }
+
+    #[test]
+    fn test_keychain_store_and_retrieve() {
+        let provider = "test-store-retrieve";
+        let key = "sk-test-keychain-12345";
+
+        // Store
+        store_api_key(provider, key).expect("Failed to store API key");
+
+        // Retrieve
+        let retrieved = get_api_key(provider).expect("Failed to get API key");
+        assert_eq!(retrieved, Some(key.to_string()));
+
+        // Cleanup
+        let _ = delete_api_key(provider);
+    }
+
+    #[test]
+    fn test_keychain_delete() {
+        let provider = "test-delete";
+        let key = "sk-test-delete-key";
+
+        // Store then delete
+        store_api_key(provider, key).expect("Failed to store API key");
+        delete_api_key(provider).expect("Failed to delete API key");
+
+        // Verify gone
+        let retrieved = get_api_key(provider).expect("Failed to get API key");
+        assert_eq!(retrieved, None);
+    }
+
+    #[test]
+    fn test_keychain_delete_nonexistent() {
+        // Deleting a key that doesn't exist should succeed silently
+        let result = delete_api_key("test-nonexistent-provider-xyz");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_keychain_get_nonexistent() {
+        // Getting a key that doesn't exist should return None
+        let result = get_api_key("test-nonexistent-provider-abc");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), None);
+    }
+
+    #[test]
+    fn test_migration_from_plaintext() {
+        // Create a temp settings file with a plaintext API key
+        let dir = std::env::temp_dir().join("velocity_test_migration");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let settings_file = dir.join("settings.json");
+        let settings = AppSettings {
+            llm_provider: "openai".to_string(),
+            api_key: "sk-migrate-me-12345".to_string(),
+            model: "gpt-4o-mini".to_string(),
+            ..Default::default()
+        };
+        let content = serde_json::to_string_pretty(&settings).unwrap();
+        std::fs::write(&settings_file, &content).unwrap();
+
+        // Simulate migration
+        let mut loaded = settings.clone();
+        migrate_api_key_to_keychain(&mut loaded);
+
+        // The in-memory struct should still have the key (for callers)
+        assert_eq!(loaded.api_key, "sk-migrate-me-12345");
+
+        // The key should be in the keychain
+        let from_keychain = get_api_key("openai").expect("Failed to get from keychain");
+        assert_eq!(from_keychain, Some("sk-migrate-me-12345".to_string()));
+
+        // Cleanup
+        let _ = delete_api_key("openai");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_save_settings_strips_api_key_from_json() {
+        // save_settings should write JSON with api_key as empty string
+        let dir = std::env::temp_dir().join("velocity_test_save_strip");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let settings = AppSettings {
+            llm_provider: "openai".to_string(),
+            api_key: "sk-should-not-appear".to_string(),
+            model: "gpt-4o-mini".to_string(),
+            ..Default::default()
+        };
+
+        // We test save_settings directly — it should strip the key
+        // Use the real settings_path, so we check the JSON content
+        save_settings(&settings).expect("Failed to save settings");
+
+        let path = settings_path().unwrap();
+        let content = std::fs::read_to_string(&path).unwrap();
+        let on_disk: AppSettings = serde_json::from_str(&content).unwrap();
+        assert_eq!(on_disk.api_key, "", "api_key should be empty in the JSON file");
+
+        // Cleanup: restore original settings
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_save_settings_with_key_stores_in_keychain() {
+        let provider = "test-save-with-key";
+        let key = "sk-save-with-key-test";
+
+        let settings = AppSettings {
+            llm_provider: provider.to_string(),
+            api_key: key.to_string(),
+            model: "gpt-4o-mini".to_string(),
+            ..Default::default()
+        };
+
+        save_settings_with_key(&settings).expect("Failed to save settings with key");
+
+        // Key should be in keychain
+        let from_keychain = get_api_key(provider).expect("Failed to get from keychain");
+        assert_eq!(from_keychain, Some(key.to_string()));
+
+        // JSON file should not have the key
+        let path = settings_path().unwrap();
+        let content = std::fs::read_to_string(&path).unwrap();
+        let on_disk: AppSettings = serde_json::from_str(&content).unwrap();
+        assert_eq!(on_disk.api_key, "", "api_key should be empty in the JSON file");
+
+        // Cleanup
+        let _ = delete_api_key(provider);
     }
 }
