@@ -52,6 +52,12 @@ None.
 | P1-I3 | Command corrections | **DONE** (`157104a`) |
 | P1-I4 | IDE-like cursor | **DONE** (`7d1a571`) |
 | P1-W2 | Multiple windows | **DONE** (`b593501`) |
+| P2-5 | Tab drag reordering | **DONE** (`64e90cf`) |
+| P2-6 | NL auto-detection without # | **DONE** (`54717f6`) |
+| P2-14 | Custom cursor shapes | **DONE** (`260442b`) |
+| P2-19 | Transparent/blurred backgrounds | **DONE** (merged) |
+| P2-20 | Block bookmarking | **DONE** (`TASK-052`) |
+| P1-U6 | Global hotkey (Quake-style) | **DONE** (`228f5b2`) |
 
 ## Outstanding Issues
 
@@ -106,11 +112,11 @@ None.
 
 | Layer | Count |
 |-------|-------|
-| Vitest (frontend) | 551 |
-| cargo test (Rust unit) | 143 (+1 ignored) |
+| Vitest (frontend) | 605 |
+| cargo test (Rust unit) | 155 (+1 ignored) |
 | Rust integration | 11 |
 | Playwright E2E | 28 |
-| **Total** | **~733** |
+| **Total** | **~799** |
 
 ## Remaining Phase 1 Roadmap
 
