@@ -60,7 +60,7 @@ static DANGER_PATTERNS: LazyLock<Vec<DangerPattern>> = LazyLock::new(|| {
         // --- Credential access ---
         (r"(?i)\bcmdkey\b", "Credential manager access", "medium"),
         (r"(?i)\bnet\s+user\b", "User account modification", "medium"),
-        (r"(?i)^\s*passwd\b", "Password change command", "medium"),
+        (r"(?i)(^|[;&|]\s*)\bpasswd\b", "Password change command", "medium"),
 
         // --- Service / process control ---
         (r"(?i)\bsc\s+stop\b", "Service stop command", "medium"),
@@ -68,6 +68,13 @@ static DANGER_PATTERNS: LazyLock<Vec<DangerPattern>> = LazyLock::new(|| {
         (r"(?i)\bStop-Service\b", "Service stop command", "medium"),
         (r"(?i)\bkill\s+.*-9\b", "Force kill process", "medium"),
         (r"(?i)\btaskkill\s+.*\/f\b", "Force kill process", "medium"),
+
+        // --- Sub-shell wrappers ---
+        (r"(?i)\bcmd\s+/c\b", "Command runs in sub-shell — review the inner command", "medium"),
+        (r"(?i)\bpowershell\s+-[cC]ommand\b", "Command runs in sub-shell — review the inner command", "medium"),
+        (r"(?i)\bbash\s+-c\b", "Command runs in sub-shell — review the inner command", "medium"),
+        (r"(?i)\bsh\s+-c\b", "Command runs in sub-shell — review the inner command", "medium"),
+        (r"(?i)\bwsl\s+.*\brm\b", "Command runs in sub-shell — review the inner command", "medium"),
 
         // --- Shutdown / reboot ---
         (r"(?i)\bshutdown\b", "System shutdown command", "high"),
@@ -271,5 +278,60 @@ mod tests {
     fn test_case_insensitive_detection() {
         let result = analyze_command_danger("RM -RF /tmp", "wsl");
         assert!(result.is_dangerous, "Case-insensitive detection should work");
+    }
+
+    // --- Sub-shell wrapper tests ---
+
+    #[test]
+    fn test_detects_cmd_c_format() {
+        let result = analyze_command_danger(r#"cmd /c "format C:""#, "cmd");
+        assert!(result.is_dangerous, "cmd /c wrapping dangerous command should be flagged");
+    }
+
+    #[test]
+    fn test_detects_cmd_c_simple() {
+        let result = analyze_command_danger("cmd /c dir", "cmd");
+        assert!(result.is_dangerous, "cmd /c should be flagged as sub-shell");
+        assert_eq!(result.danger_level, "medium");
+    }
+
+    #[test]
+    fn test_detects_powershell_command() {
+        let result = analyze_command_danger(r#"powershell -Command "Remove-Item C:\Temp""#, "cmd");
+        assert!(result.is_dangerous, "powershell -Command should be flagged");
+        assert_eq!(result.danger_level, "medium");
+    }
+
+    #[test]
+    fn test_detects_bash_c() {
+        let result = analyze_command_danger(r#"bash -c "rm -rf /""#, "wsl");
+        assert!(result.is_dangerous, "bash -c should be flagged");
+    }
+
+    #[test]
+    fn test_detects_sh_c() {
+        let result = analyze_command_danger(r#"sh -c "echo hello""#, "wsl");
+        assert!(result.is_dangerous, "sh -c should be flagged as sub-shell");
+        assert_eq!(result.danger_level, "medium");
+    }
+
+    #[test]
+    fn test_detects_wsl_rm() {
+        let result = analyze_command_danger("wsl rm -rf /home/user", "cmd");
+        assert!(result.is_dangerous, "wsl rm should be flagged");
+    }
+
+    // --- passwd regex anchoring tests ---
+
+    #[test]
+    fn test_detects_passwd_after_semicolon() {
+        let result = analyze_command_danger("; passwd", "wsl");
+        assert!(result.is_dangerous, "passwd after semicolon should be flagged");
+    }
+
+    #[test]
+    fn test_detects_passwd_after_pipe() {
+        let result = analyze_command_danger("echo yes | passwd", "wsl");
+        assert!(result.is_dangerous, "passwd after pipe should be flagged");
     }
 }

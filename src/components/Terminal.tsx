@@ -666,7 +666,7 @@ function Terminal({ paneId, onTitleChange }: TerminalProps) {
           }
         })
         .catch(() => {
-          // Non-fatal: skip warning on analysis failure
+          setDangerWarning({ is_dangerous: true, reason: 'Could not verify command safety', danger_level: 'medium' });
         });
     },
     [shellType],
@@ -772,7 +772,7 @@ function Terminal({ paneId, onTitleChange }: TerminalProps) {
               setDangerWarning(danger);
             }
           } catch {
-            // Danger check failure is non-fatal; continue without warning
+            setDangerWarning({ is_dangerous: true, reason: 'Could not verify command safety', danger_level: 'medium' });
           }
           // After translation populates, reset override so auto-detect kicks in on next input
           setModeOverride(false);
