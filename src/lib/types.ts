@@ -46,7 +46,12 @@ export interface AppSettings {
   theme?: string;
   cursor_shape?: CursorShape;
   auto_detect_nl?: boolean;
+  background_effect?: BackgroundEffect;
+  background_opacity?: number;
 }
+
+export const BACKGROUND_EFFECTS = ['none', 'transparent', 'acrylic', 'mica'] as const;
+export type BackgroundEffect = typeof BACKGROUND_EFFECTS[number];
 
 export const LLM_PROVIDERS = [
   { id: 'openai', name: 'OpenAI', defaultModel: 'gpt-4o-mini', models: ['gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo'] },
