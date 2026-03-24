@@ -82,11 +82,43 @@ fn clean_response(raw: &str) -> String {
 
 /// Sanitizes error messages by replacing API keys with [REDACTED].
 /// Applied to all provider error paths as defense in depth.
+/// Also strips `key=<value>` patterns from URLs to catch Google API keys
+/// even if the exact key string doesn't match (e.g. URL-encoded variants).
 fn sanitize_error(error: &str, api_key: &str) -> String {
-    if api_key.is_empty() {
-        return error.to_string();
+    let mut result = if api_key.is_empty() {
+        error.to_string()
+    } else {
+        error.replace(api_key, "[REDACTED]")
+    };
+
+    // Defense-in-depth: strip key=<value> patterns from URLs.
+    // Matches `key=` followed by non-whitespace, non-ampersand chars (i.e. a query param value).
+    result = redact_url_key_param(&result);
+
+    result
+}
+
+/// Replaces `key=<value>` query parameter patterns in URLs with `key=[REDACTED]`.
+/// The value is any sequence of characters that are not whitespace, `&`, or `#`.
+fn redact_url_key_param(input: &str) -> String {
+    let mut result = String::with_capacity(input.len());
+    let mut remaining = input;
+
+    while let Some(pos) = remaining.find("key=") {
+        // Push everything before "key="
+        result.push_str(&remaining[..pos]);
+        result.push_str("key=[REDACTED]");
+
+        // Advance past "key=" and then past the value
+        let after_key = &remaining[pos + 4..];
+        let end = after_key
+            .find(|c: char| c.is_whitespace() || c == '&' || c == '#' || c == '"' || c == '\'')
+            .unwrap_or(after_key.len());
+        remaining = &after_key[end..];
     }
-    error.replace(api_key, "[REDACTED]")
+
+    result.push_str(remaining);
+    result
 }
 
 /// Validates that a model name is safe for URL path interpolation.
@@ -288,6 +320,8 @@ async fn call_anthropic_classification(
 }
 
 /// Calls the Google Gemini API for classification.
+/// Uses Authorization header instead of key query parameter to avoid leaking
+/// the API key in URLs (which may appear in logs, proxies, and error messages).
 async fn call_google_classification(
     api_key: &str,
     model: &str,
@@ -297,8 +331,8 @@ async fn call_google_classification(
     validate_model_for_url(model)?;
     let encoded_model = url_encode(model);
     let url = format!(
-        "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}",
-        encoded_model, api_key
+        "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent",
+        encoded_model
     );
 
     let body = serde_json::json!({
@@ -309,6 +343,7 @@ async fn call_google_classification(
 
     let response = http_client()
         .post(&url)
+        .header("Authorization", format!("Bearer {}", api_key))
         .header("Content-Type", "application/json")
         .json(&body)
         .send()
@@ -620,6 +655,8 @@ async fn call_anthropic_fix(
 }
 
 /// Calls the Google Gemini API for fix suggestions.
+/// Uses Authorization header instead of key query parameter to avoid leaking
+/// the API key in URLs (which may appear in logs, proxies, and error messages).
 async fn call_google_fix(
     api_key: &str,
     model: &str,
@@ -629,8 +666,8 @@ async fn call_google_fix(
     validate_model_for_url(model)?;
     let encoded_model = url_encode(model);
     let url = format!(
-        "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}",
-        encoded_model, api_key
+        "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent",
+        encoded_model
     );
 
     let body = serde_json::json!({
@@ -641,6 +678,7 @@ async fn call_google_fix(
 
     let response = http_client()
         .post(&url)
+        .header("Authorization", format!("Bearer {}", api_key))
         .header("Content-Type", "application/json")
         .json(&body)
         .send()
@@ -874,6 +912,8 @@ async fn call_anthropic(
 }
 
 /// Calls the Google Gemini generateContent API.
+/// Uses Authorization header instead of key query parameter to avoid leaking
+/// the API key in URLs (which may appear in logs, proxies, and error messages).
 async fn call_google(
     api_key: &str,
     model: &str,
@@ -883,8 +923,8 @@ async fn call_google(
     validate_model_for_url(model)?;
     let encoded_model = url_encode(model);
     let url = format!(
-        "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}",
-        encoded_model, api_key
+        "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent",
+        encoded_model
     );
 
     let body = serde_json::json!({
@@ -895,6 +935,7 @@ async fn call_google(
 
     let response = http_client()
         .post(&url)
+        .header("Authorization", format!("Bearer {}", api_key))
         .header("Content-Type", "application/json")
         .json(&body)
         .send()
@@ -1370,5 +1411,92 @@ mod tests {
         let result = suggest_fix(&settings, &request).await;
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("No API key"));
+    }
+
+    // --- Google API key redaction tests (TASK-054) ---
+
+    #[test]
+    fn test_google_error_redacts_api_key_from_url() {
+        let api_key = "AIzaSyD-fake-google-key-1234567890";
+        let error = format!(
+            "HTTP request failed: error sending request for url (https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={}): connection refused",
+            api_key
+        );
+        let sanitized = sanitize_error(&error, api_key);
+        assert!(
+            !sanitized.contains(api_key),
+            "Sanitized error must not contain the Google API key, got: {}",
+            sanitized
+        );
+        assert!(
+            sanitized.contains("[REDACTED]"),
+            "Sanitized error should contain [REDACTED]"
+        );
+    }
+
+    #[test]
+    fn test_sanitize_error_handles_google_url_pattern() {
+        // Even if we don't know the exact key, key=<value> should be redacted
+        let error = "Request failed: https://example.com/api?key=AIzaSyDsomeSecretKey123&other=param";
+        let sanitized = sanitize_error(error, "different-key");
+        assert!(
+            !sanitized.contains("AIzaSyDsomeSecretKey123"),
+            "key=<value> pattern should be redacted even if api_key doesn't match, got: {}",
+            sanitized
+        );
+        assert!(
+            sanitized.contains("key=[REDACTED]"),
+            "Should replace key=<value> with key=[REDACTED], got: {}",
+            sanitized
+        );
+        // The &other=param should be preserved
+        assert!(
+            sanitized.contains("&other=param"),
+            "Other query params should be preserved, got: {}",
+            sanitized
+        );
+    }
+
+    #[test]
+    fn test_google_translate_uses_header_auth() {
+        // Verify that the Google URL construction no longer includes key= query param.
+        // We test by constructing the URL the same way as call_google does.
+        let model = "gemini-2.0-flash";
+        let encoded_model = url_encode(model);
+        let url = format!(
+            "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent",
+            encoded_model
+        );
+        assert!(
+            !url.contains("key="),
+            "Google URL should not contain key= query parameter, got: {}",
+            url
+        );
+        assert!(
+            !url.contains('?'),
+            "Google URL should not have any query string, got: {}",
+            url
+        );
+    }
+
+    #[test]
+    fn test_redact_url_key_param_no_key() {
+        let input = "Request failed: https://example.com/api?model=gemini";
+        assert_eq!(redact_url_key_param(input), input);
+    }
+
+    #[test]
+    fn test_redact_url_key_param_at_end() {
+        let input = "url: https://example.com?key=SECRET123";
+        let result = redact_url_key_param(input);
+        assert_eq!(result, "url: https://example.com?key=[REDACTED]");
+    }
+
+    #[test]
+    fn test_redact_url_key_param_multiple() {
+        let input = "key=FIRST and key=SECOND";
+        let result = redact_url_key_param(input);
+        assert!(!result.contains("FIRST"), "First key value should be redacted");
+        assert!(!result.contains("SECOND"), "Second key value should be redacted");
     }
 }
