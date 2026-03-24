@@ -25,9 +25,11 @@ interface BlockViewProps {
   hasApiKey?: boolean;      // whether an API key is configured
   isMostRecentFailed?: boolean;  // whether this is the most recently failed block
   knownCommands?: Set<string>;  // known commands for typo correction
+  isBookmarked?: boolean;       // true if this block is bookmarked
+  onToggleBookmark?: () => void; // callback to toggle bookmark state
 }
 
-function BlockView({ block, isActive, isFocused = false, isCollapsed = false, onToggleCollapse, onRerun, onSelect, onUseFix, isVisible = true, observeRef, highlights, shellType, cwd, hasApiKey = false, isMostRecentFailed = false, knownCommands }: BlockViewProps) {
+function BlockView({ block, isActive, isFocused = false, isCollapsed = false, onToggleCollapse, onRerun, onSelect, onUseFix, isVisible = true, observeRef, highlights, shellType, cwd, hasApiKey = false, isMostRecentFailed = false, knownCommands, isBookmarked = false, onToggleBookmark }: BlockViewProps) {
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterText, setFilterText] = useState('');
   const filterInputRef = useRef<HTMLInputElement>(null);
@@ -159,7 +161,7 @@ function BlockView({ block, isActive, isFocused = false, isCollapsed = false, on
   return (
     <div
       ref={observeRef}
-      className={`block-container ${isActive && block.status === 'running' ? 'block-active' : ''} ${isFocused ? 'block-focused' : ''} ${isCollapsed ? 'block-collapsed' : ''}`}
+      className={`block-container ${isActive && block.status === 'running' ? 'block-active' : ''} ${isFocused ? 'block-focused' : ''} ${isCollapsed ? 'block-collapsed' : ''} ${isBookmarked ? 'block-bookmarked' : ''}`}
       data-testid="block-container"
       onClick={handleClick}
     >
@@ -182,6 +184,11 @@ function BlockView({ block, isActive, isFocused = false, isCollapsed = false, on
             <span className="block-command">
               {block.command}
             </span>
+            {isBookmarked && (
+              <span className="bookmark-indicator" data-testid="bookmark-indicator" aria-label="bookmarked">
+                ★
+              </span>
+            )}
           </div>
           <div className="block-header-right">
             {isCollapsed && (
@@ -249,6 +256,14 @@ function BlockView({ block, isActive, isFocused = false, isCollapsed = false, on
               </button>
               <button className="block-action-btn" onClick={handleRerun}>
                 Rerun
+              </button>
+              <button
+                className={`block-action-btn ${isBookmarked ? 'block-action-btn-active' : ''}`}
+                data-testid="bookmark-toggle"
+                onClick={onToggleBookmark}
+                aria-label={isBookmarked ? 'Remove bookmark' : 'Add bookmark'}
+              >
+                {isBookmarked ? '★ Bookmarked' : '☆ Bookmark'}
               </button>
             </>
           )}

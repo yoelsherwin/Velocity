@@ -5,7 +5,7 @@ import { createSession, writeToSession, closeSession, startReading } from '../li
 import { isValidCwdPath } from '../lib/session';
 import { SHELL_TYPES, ShellType, Block, CursorShape } from '../lib/types';
 import { extractExitCode, getExitCodeMarker } from '../lib/exit-code-parser';
-import { classifyIntent, stripHashPrefix, ClassificationResult } from '../lib/intent-classifier';
+import { classifyIntent, stripHashPrefix, shouldAutoRouteNL, ClassificationResult } from '../lib/intent-classifier';
 import { translateCommand, classifyIntentLLM } from '../lib/llm';
 import { getSettings } from '../lib/settings';
 import { getCwd } from '../lib/cwd';
@@ -71,6 +71,7 @@ function Terminal({ paneId, onTitleChange }: TerminalProps) {
   const [altScreenActive, setAltScreenActive] = useState(false);
   const [focusedBlockIndex, setFocusedBlockIndex] = useState(-1);
   const [collapsedBlocks, setCollapsedBlocks] = useState<Set<string>>(new Set());
+  const [bookmarkedBlocks, setBookmarkedBlocks] = useState<Set<string>>(new Set());
   const [gridRows, setGridRows] = useState<GridRow[]>([]);
   const [cursorRow, setCursorRow] = useState<number>(0);
   const [cursorCol, setCursorCol] = useState<number>(0);
@@ -104,6 +105,8 @@ function Terminal({ paneId, onTitleChange }: TerminalProps) {
   const savedInputRef = useRef('');
   const [hasApiKey, setHasApiKey] = useState(false);
   const [cursorShape, setCursorShape] = useState<CursorShape>('bar');
+  const [autoDetectNl, setAutoDetectNl] = useState(true);
+  const [nlAutoDetected, setNlAutoDetected] = useState(false);
 
   // Keep a stable ref for onTitleChange to avoid re-triggering the effect
   const onTitleChangeRef = useRef(onTitleChange);
@@ -559,6 +562,7 @@ function Terminal({ paneId, onTitleChange }: TerminalProps) {
       .then((settings) => {
         setHasApiKey(!!settings.api_key);
         setCursorShape(settings.cursor_shape ?? 'bar');
+        setAutoDetectNl(settings.auto_detect_nl ?? true);
       })
       .catch(() => setHasApiKey(false));
   }, []);
@@ -680,6 +684,18 @@ function Terminal({ paneId, onTitleChange }: TerminalProps) {
     setCollapsedBlocks(new Set());
   }, []);
 
+  const toggleBlockBookmark = useCallback((blockId: string) => {
+    setBookmarkedBlocks((prev) => {
+      const next = new Set(prev);
+      if (next.has(blockId)) {
+        next.delete(blockId);
+      } else {
+        next.add(blockId);
+      }
+      return next;
+    });
+  }, []);
+
   const handleSubmit = useCallback(
     async (cmd: string) => {
       const trimmed = cmd.trim();
@@ -710,9 +726,16 @@ function Terminal({ paneId, onTitleChange }: TerminalProps) {
         }
       }
 
-      // Use inputMode.intent to determine routing (replaces hardcoded hasHashPrefix check)
-      if (resolvedIntent === 'natural_language') {
+      // Determine whether to route to NL translation.
+      // When auto_detect_nl is disabled, only route if the user explicitly typed '#'.
+      const resolvedClassification: ClassificationResult = { intent: resolvedIntent, confidence: 'high' };
+      const routeToNL = shouldAutoRouteNL(trimmed, resolvedClassification, autoDetectNl);
+
+      if (routeToNL) {
         // Agent mode: translate via LLM
+        // Flash the mode indicator when NL was auto-detected (no # prefix)
+        const wasAutoDetected = !trimmed.startsWith('#') && resolvedIntent === 'natural_language';
+        setNlAutoDetected(wasAutoDetected);
         // Strip # prefix if present (backward compatible)
         const nlInput = trimmed.startsWith('#') ? stripHashPrefix(trimmed) : trimmed;
         if (!nlInput) {
@@ -732,6 +755,7 @@ function Terminal({ paneId, onTitleChange }: TerminalProps) {
           // After translation populates, reset override so auto-detect kicks in on next input
           setModeOverride(false);
           setInputMode({ intent: 'cli', confidence: 'high' });
+          setNlAutoDetected(false);
         } catch (err) {
           // Discard stale error if user switched shells or reset while in-flight
           if (translationIdRef.current !== thisTranslation) return;
@@ -759,8 +783,9 @@ function Terminal({ paneId, onTitleChange }: TerminalProps) {
       // Reset mode override after submit
       setModeOverride(false);
       setInputMode({ intent: 'cli', confidence: 'high' });
+      setNlAutoDetected(false);
     },
-    [shellType, addCommand, submitCommand, inputMode],
+    [shellType, addCommand, submitCommand, inputMode, autoDetectNl],
   );
 
   const handleInputChange = useCallback(
@@ -772,6 +797,8 @@ function Terminal({ paneId, onTitleChange }: TerminalProps) {
       setFocusedBlockIndex(-1);
       // Clear agent error when user starts typing
       setAgentError(null);
+      // Reset auto-detected flash on new input
+      setNlAutoDetected(false);
       // Auto-classify on input change (unless user has manually overridden)
       if (!modeOverride) {
         setInputMode(classifyIntent(newValue, knownCommands));
@@ -864,6 +891,20 @@ function Terminal({ paneId, onTitleChange }: TerminalProps) {
 
       if (!e.ctrlKey || e.shiftKey || e.altKey || e.metaKey) return;
 
+      if (e.key === 'b' || e.key === 'B') {
+        // Don't intercept keys when the user is typing in an input or textarea
+        const tag = (e.target as HTMLElement)?.tagName;
+        if (tag === 'TEXTAREA' || tag === 'INPUT') return;
+        e.preventDefault();
+        if (focusedBlockIndex >= 0) {
+          const block = blocksRef.current[focusedBlockIndex];
+          if (block && block.command !== '') {
+            toggleBlockBookmark(block.id);
+          }
+        }
+        return;
+      }
+
       if (e.key === 'ArrowDown') {
         e.preventDefault();
         setFocusedBlockIndex((prev) => {
@@ -885,7 +926,7 @@ function Terminal({ paneId, onTitleChange }: TerminalProps) {
 
     document.addEventListener('keydown', handleBlockNav);
     return () => document.removeEventListener('keydown', handleBlockNav);
-  }, [focusedBlockIndex, toggleBlockCollapse]);
+  }, [focusedBlockIndex, toggleBlockCollapse, toggleBlockBookmark]);
 
   // Scroll focused block into view
   useEffect(() => {
@@ -1048,6 +1089,41 @@ function Terminal({ paneId, onTitleChange }: TerminalProps) {
           }
           break;
         }
+        case 'block.toggleBookmark': {
+          if (focusedBlockIndex >= 0) {
+            const block = blocksRef.current[focusedBlockIndex];
+            if (block && block.command !== '') {
+              toggleBlockBookmark(block.id);
+            }
+          }
+          break;
+        }
+        case 'block.nextBookmark': {
+          const blocks = blocksRef.current;
+          const start = focusedBlockIndex >= 0 ? focusedBlockIndex : -1;
+          // Search forward from current position, wrapping around
+          for (let i = 1; i <= blocks.length; i++) {
+            const idx = (start + i) % blocks.length;
+            if (bookmarkedBlocks.has(blocks[idx].id)) {
+              setFocusedBlockIndex(idx);
+              break;
+            }
+          }
+          break;
+        }
+        case 'block.prevBookmark': {
+          const blocks = blocksRef.current;
+          const start = focusedBlockIndex >= 0 ? focusedBlockIndex : 0;
+          // Search backward from current position, wrapping around
+          for (let i = 1; i <= blocks.length; i++) {
+            const idx = (start - i + blocks.length) % blocks.length;
+            if (bookmarkedBlocks.has(blocks[idx].id)) {
+              setFocusedBlockIndex(idx);
+              break;
+            }
+          }
+          break;
+        }
         default:
           break;
       }
@@ -1055,7 +1131,7 @@ function Terminal({ paneId, onTitleChange }: TerminalProps) {
 
     document.addEventListener('velocity:command', handleCommand);
     return () => document.removeEventListener('velocity:command', handleCommand);
-  }, [paneId, handleShellSwitch, handleRestart, handleToggleMode, search.isOpen, search.open, historySearchOpen, input, collapseAllBlocks, expandAllBlocks, toggleBlockCollapse, focusedBlockIndex]);
+  }, [paneId, handleShellSwitch, handleRestart, handleToggleMode, search.isOpen, search.open, historySearchOpen, input, collapseAllBlocks, expandAllBlocks, toggleBlockCollapse, toggleBlockBookmark, focusedBlockIndex, bookmarkedBlocks]);
 
   // Auto-expand collapsed block when search navigates to a match inside it
   useEffect(() => {
@@ -1197,6 +1273,8 @@ function Terminal({ paneId, onTitleChange }: TerminalProps) {
                 hasApiKey={hasApiKey}
                 isMostRecentFailed={block.id === mostRecentFailedBlockId}
                 knownCommands={knownCommands}
+                isBookmarked={bookmarkedBlocks.has(block.id)}
+                onToggleBookmark={() => toggleBlockBookmark(block.id)}
               />
             );
           })}
@@ -1242,6 +1320,7 @@ function Terminal({ paneId, onTitleChange }: TerminalProps) {
             onCursorChange={handleCursorChange}
             gitInfo={gitInfo}
             cursorShape={cursorShape}
+            modeAutoDetected={nlAutoDetected}
           />
           {agentError && (
             <div className="agent-error" data-testid="agent-error">

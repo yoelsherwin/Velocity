@@ -814,6 +814,18 @@ html, body, #root {
   opacity: 0.6;
 }
 
+.mode-indicator-flash {
+  animation: mode-flash 0.6s ease-in-out;
+}
+
+@keyframes mode-flash {
+  0% { opacity: 1; }
+  25% { opacity: 0.3; }
+  50% { opacity: 1; }
+  75% { opacity: 0.3; }
+  100% { opacity: 1; }
+}
+
 /* --- Search Bar Styles --- */
 
 .search-bar {
@@ -1235,6 +1247,24 @@ html, body, #root {
   background-color: var(--search-highlight-bg);
   color: var(--accent-yellow);
   border-radius: 1px;
+}
+
+/* --- Block Bookmark Styles --- */
+
+.block-bookmarked {
+  border-left: 2px solid var(--accent-yellow);
+  padding-left: 6px;
+}
+
+.bookmark-indicator {
+  color: var(--accent-yellow);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.block-action-btn-active {
+  color: var(--accent-yellow);
+  border-color: var(--accent-yellow);
 }
 
 /* --- Block Filter Styles --- */
