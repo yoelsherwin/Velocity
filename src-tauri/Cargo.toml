@@ -28,9 +28,6 @@ tokio = { version = "1", features = ["rt", "macros"] }
 reqwest = { version = "0.12", features = ["json"] }
 dirs = "6"
 urlencoding = "2"
-<<<<<<< HEAD
 tauri-plugin-global-shortcut = "2"
-=======
 window-vibrancy = "0.6"
->>>>>>> worktree-agent-a7ef51a1
 
