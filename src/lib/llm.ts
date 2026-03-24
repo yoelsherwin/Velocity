@@ -55,6 +55,32 @@ export async function suggestFix(
 }
 
 /**
+ * Result of analyzing a command for dangerous patterns.
+ */
+export interface DangerAnalysis {
+  is_dangerous: boolean;
+  reason: string;
+  danger_level: string;
+}
+
+/**
+ * Analyzes a command for dangerous patterns (destructive, exfiltration, etc.).
+ * Called before displaying LLM-generated commands to warn the user.
+ *
+ * @param command - The command to analyze
+ * @param shellType - The target shell: "powershell", "cmd", or "wsl"
+ */
+export async function analyzeCommandDanger(
+  command: string,
+  shellType: string,
+): Promise<DangerAnalysis> {
+  return invoke<DangerAnalysis>('analyze_command_danger', {
+    command,
+    shellType,
+  });
+}
+
+/**
  * Classifies ambiguous user input as CLI or natural language using the configured LLM provider.
  * Only called on submit (Enter) when the heuristic classifier has low confidence.
  *

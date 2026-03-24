@@ -6,7 +6,7 @@ import { isValidCwdPath } from '../lib/session';
 import { SHELL_TYPES, ShellType, Block, CursorShape } from '../lib/types';
 import { extractExitCode, getExitCodeMarker } from '../lib/exit-code-parser';
 import { classifyIntent, stripHashPrefix, shouldAutoRouteNL, ClassificationResult } from '../lib/intent-classifier';
-import { translateCommand, classifyIntentLLM } from '../lib/llm';
+import { translateCommand, classifyIntentLLM, analyzeCommandDanger, type DangerAnalysis } from '../lib/llm';
 import { getSettings } from '../lib/settings';
 import { getCwd } from '../lib/cwd';
 import { getGitInfo, type GitInfo } from '../lib/git';
@@ -79,6 +79,7 @@ function Terminal({ paneId, onTitleChange }: TerminalProps) {
   const [agentLoading, setAgentLoading] = useState(false);
   const [agentError, setAgentError] = useState<string | null>(null);
   const [loadingLabel, setLoadingLabel] = useState<string>('Translating...');
+  const [dangerWarning, setDangerWarning] = useState<DangerAnalysis | null>(null);
   const translationIdRef = useRef(0);
   const outputRef = useRef<HTMLDivElement>(null);
   const unlistenRefs = useRef<(() => void)[]>([]);
@@ -656,8 +657,19 @@ function Terminal({ paneId, onTitleChange }: TerminalProps) {
   const handleUseFix = useCallback(
     (command: string) => {
       setInput(command);
+      // Check fix suggestion for dangerous patterns
+      setDangerWarning(null);
+      analyzeCommandDanger(command, shellType)
+        .then((danger) => {
+          if (danger.is_dangerous) {
+            setDangerWarning(danger);
+          }
+        })
+        .catch(() => {
+          // Non-fatal: skip warning on analysis failure
+        });
     },
-    [],
+    [shellType],
   );
 
   const toggleBlockCollapse = useCallback((blockId: string) => {
@@ -752,6 +764,16 @@ function Terminal({ paneId, onTitleChange }: TerminalProps) {
           // Discard stale translation if user switched shells or reset while in-flight
           if (translationIdRef.current !== thisTranslation) return;
           setInput(translated); // Put translated command in the editor for review
+          // Check the translated command for dangerous patterns
+          setDangerWarning(null);
+          try {
+            const danger = await analyzeCommandDanger(translated, shellType);
+            if (translationIdRef.current === thisTranslation && danger.is_dangerous) {
+              setDangerWarning(danger);
+            }
+          } catch {
+            // Danger check failure is non-fatal; continue without warning
+          }
           // After translation populates, reset override so auto-detect kicks in on next input
           setModeOverride(false);
           setInputMode({ intent: 'cli', confidence: 'high' });
@@ -795,8 +817,9 @@ function Terminal({ paneId, onTitleChange }: TerminalProps) {
       reset();
       // Reset block navigation focus on input
       setFocusedBlockIndex(-1);
-      // Clear agent error when user starts typing
+      // Clear agent error and danger warning when user starts typing
       setAgentError(null);
+      setDangerWarning(null);
       // Reset auto-detected flash on new input
       setNlAutoDetected(false);
       // Auto-classify on input change (unless user has manually overridden)
@@ -1297,6 +1320,20 @@ function Terminal({ paneId, onTitleChange }: TerminalProps) {
             <div className="agent-loading" data-testid="agent-loading">
               <span className="agent-spinner">&#x27F3;</span>
               {loadingLabel}
+            </div>
+          )}
+          {dangerWarning && dangerWarning.is_dangerous && (
+            <div className="danger-warning" data-testid="danger-warning">
+              <span className="danger-warning-text">
+                &#x26A0;&#xFE0F; Warning: This command may be dangerous — {dangerWarning.reason}. Review carefully before executing.
+              </span>
+              <button
+                className="danger-warning-dismiss"
+                data-testid="danger-warning-dismiss"
+                onClick={() => setDangerWarning(null)}
+              >
+                Dismiss
+              </button>
             </div>
           )}
           <HistorySearch

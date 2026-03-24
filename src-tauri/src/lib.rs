@@ -1,5 +1,6 @@
 pub mod ansi;
 mod commands;
+pub mod danger;
 pub mod llm;
 pub mod pty;
 pub mod session;
@@ -71,6 +72,7 @@ pub fn run() {
             commands::list_directory,
             commands::create_new_window,
             commands::set_window_effect,
+            commands::analyze_command_danger,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

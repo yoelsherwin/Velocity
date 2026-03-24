@@ -31,4 +31,5 @@ urlencoding = "2"
 tauri-plugin-global-shortcut = "2"
 window-vibrancy = "0.6"
 keyring = { version = "3", features = ["windows-native"] }
+regex = "1"
 

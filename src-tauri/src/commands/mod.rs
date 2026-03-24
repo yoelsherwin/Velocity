@@ -1,3 +1,4 @@
+use crate::danger;
 use crate::llm;
 use crate::pty::SessionManager;
 use crate::session;
@@ -640,6 +641,11 @@ pub async fn list_directory(path: String) -> Result<Vec<FileEntry>, String> {
     tokio::task::spawn_blocking(move || compute_list_directory(&p))
         .await
         .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub fn analyze_command_danger(command: String, shell_type: String) -> danger::DangerAnalysis {
+    danger::analyze_command_danger(&command, &shell_type)
 }
 
 #[tauri::command]
