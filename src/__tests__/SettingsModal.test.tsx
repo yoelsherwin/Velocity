@@ -96,13 +96,10 @@ describe('SettingsModal', () => {
         font_family: undefined,
         font_size: undefined,
         line_height: undefined,
-<<<<<<< HEAD
         cursor_shape: 'bar',
         auto_detect_nl: true,
-=======
         background_effect: undefined,
         background_opacity: 1,
->>>>>>> worktree-agent-a7ef51a1
       });
     });
   });

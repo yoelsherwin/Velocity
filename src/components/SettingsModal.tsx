@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { AppSettings, LLM_PROVIDERS, LlmProviderId, BACKGROUND_EFFECTS, BackgroundEffect } from '../lib/types';
+import { AppSettings, LLM_PROVIDERS, LlmProviderId, BACKGROUND_EFFECTS, BackgroundEffect, CURSOR_SHAPES, CursorShape } from '../lib/types';
 import { getSettings, saveSettings } from '../lib/settings';
 import { applyFontSettings } from '../lib/font-settings';
 import { THEMES, DEFAULT_THEME_ID, applyThemeById } from '../lib/themes';
@@ -21,6 +21,8 @@ function SettingsModal({ onClose }: SettingsModalProps) {
   const [lineHeight, setLineHeight] = useState<string>('');
   const [backgroundEffect, setBackgroundEffect] = useState<BackgroundEffect>('none');
   const [backgroundOpacity, setBackgroundOpacity] = useState<string>('1.0');
+  const [cursorShape, setCursorShape] = useState<CursorShape>('bar');
+  const [autoDetectNl, setAutoDetectNl] = useState(true);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,6 +43,8 @@ function SettingsModal({ onClose }: SettingsModalProps) {
         setLineHeight(settings.line_height != null ? String(settings.line_height) : '');
         setBackgroundEffect(settings.background_effect ?? 'none');
         setBackgroundOpacity(settings.background_opacity != null ? String(settings.background_opacity) : '1.0');
+        setCursorShape(settings.cursor_shape ?? 'bar');
+        setAutoDetectNl(settings.auto_detect_nl ?? true);
         setLoading(false);
       })
       .catch((err) => {
@@ -84,8 +88,10 @@ function SettingsModal({ onClose }: SettingsModalProps) {
       font_family: fontFamily || undefined,
       font_size: parsedFontSize && !isNaN(parsedFontSize) ? parsedFontSize : undefined,
       line_height: parsedLineHeight && !isNaN(parsedLineHeight) ? parsedLineHeight : undefined,
+      cursor_shape: cursorShape,
       background_effect: backgroundEffect !== 'none' ? backgroundEffect : undefined,
       background_opacity: parsedOpacity && !isNaN(parsedOpacity) ? parsedOpacity : undefined,
+      auto_detect_nl: autoDetectNl,
     };
     try {
       await saveSettings(settings);
@@ -252,6 +258,33 @@ function SettingsModal({ onClose }: SettingsModalProps) {
             >
               {'$ echo "Hello, World!"'}
             </div>
+
+            <label className="settings-label" htmlFor="settings-cursor-shape">
+              Cursor Shape
+            </label>
+            <select
+              id="settings-cursor-shape"
+              data-testid="settings-cursor-shape"
+              className="settings-select"
+              value={cursorShape}
+              onChange={(e) => setCursorShape(e.target.value as CursorShape)}
+            >
+              {CURSOR_SHAPES.map((shape) => (
+                <option key={shape} value={shape}>
+                  {shape.charAt(0).toUpperCase() + shape.slice(1)}
+                </option>
+              ))}
+            </select>
+
+            <label className="settings-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                data-testid="settings-auto-detect-nl"
+                checked={autoDetectNl}
+                onChange={(e) => setAutoDetectNl(e.target.checked)}
+              />
+              Auto-detect natural language (without # prefix)
+            </label>
 
             <div style={{ borderBottom: '1px solid var(--border-color)', margin: '4px 0' }} />
 
